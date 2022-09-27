@@ -1,0 +1,342 @@
+﻿<!DOCTYPE HTML>
+<!--
+	Template Phantom by HTML5 UP
+	Downloaded from html5up.net | @ajlkn
+	Changed by Bohdan Kondratenko for Job Application Purposes
+-->
+<html>
+	<head>
+		<title>_Die_AMPEL_ESP_v2.ino</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+		<link rel="stylesheet" href="../../assets/css/main.css" />
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/themes/prism.min.css"/>
+		<noscript><link rel="stylesheet" href="../../assets/css/noscript.css" /></noscript>
+	</head>
+
+	<body class="is-preload">
+
+		<button onclick="history.back()" id="arrow_back_outline" title="Back">
+			<span id="arrow_back"></span>
+		</button>
+
+		<button onclick="topFunction()" id="arrow_top_outline" title="Scroll up">
+			<span id="arrow_top"></span>
+		</button>
+
+		<!-- Wrapper -->
+			<div id="wrapper">
+
+				<!-- Header -->
+					<header id="header">
+						<div class="inner">
+
+							<!-- Logo -->
+								<a href="../../index.html" class="logo">
+									<span class="symbol"><img src="../../images/logo.svg" alt="" /></span><span class="title">Bohdan Kondratenko</span>
+								</a>
+
+						</div>
+					</header>
+
+				<!-- Main -->
+				<h2>_Die_AMPEL_ESP_v2.ino</h2>
+				<pre>
+					<code class="language-clike">
+#include &#60;ESP8266WiFi.h&#62;
+#include &#60;ESP8266WebServer.h&#62;
+#include &#60;ESP8266HTTPClient.h&#62;
+#include &#60;WiFiClient.h&#62;
+#include &#60;TextFinder.h&#62;
+
+/***************************** TIME SYNCHRONISATION LIBRARIES *****************************/
+#include &#60;NTPClient.h&#62;
+#include &#60;WiFiUdp.h&#62;
+
+/***************************** PRIVATE INCLUDES *****************************/
+#include "_Die_AMPEL_ESP_v2.h"
+#include "Server.h"
+#include "HTTP.h"
+
+#define WIFI_CONNECT_TIMEOUT 15
+#define GET_STATES_INTERVAL 2000
+
+/***************************** VARIABLES *****************************/
+status_flags_t Status;
+
+/**** Headquarters ****/
+//const char* ssid = "Waifaaii";  
+//const char* password = "luckbastonly_2";
+
+/**** Vodafone router ****/
+const char* ssid = "WLAN1-DB246C";  
+const char* password = "9C728FC499A"; 
+
+/**** My Hotspot ****/
+//const char* ssid = "Ampel";  
+//const char* password = "11332244"; 
+
+/**** Edunet network ****/
+//const char* ssid = "SWSEDU02";
+//const char* password = "IoT.4.SPE";  
+
+char Comand_line[16]; //(max length of line is 10 so far) 
+uint8_t i = 0;
+uint8_t WiFi_conect_tries = 0;
+
+const char* serverName = "http://ampel101.000webhostapp.com/post.php";
+const char* initAddress = "http://ampel101.000webhostapp.com/ip.php";  /**********change to the right file adress*********/ 
+const char* Get_states_addr = "http://ampel101.000webhostapp.com/Get.php";
+
+uint16_t Get_states_timer = 0;
+
+// Keep this API Key value to be compatible with the PHP code provided in the project page. 
+// If you change the apiKeyValue value, the PHP file /post-esp-data.php also needs to have the same key 
+String Ampel_state_apiKey = "(t#L~)U|dYjU1Yc~";
+
+ESP8266WebServer server(80);  // Server variable to perform the answer to the POST Request
+WiFiClient client;
+HTTPClient http;
+
+char global_IP_Server[] = "checkip.dyndns.org";
+char externalIP[17];
+char externalIP_password[] = "113322";
+
+char AccessPoint_name[] = "Die_Ampel_AccessPoint";
+char AccessPoint_password[] = "BohdankoUsmanko";
+
+Wifi_reconnect_t Wifi_timers;  // Structure for correct search for the internet connection (in the case if WiFi is not connected)
+
+ /***************************** FUNKTION PROTOTYPES *****************************/
+void UART_routine(status_flags_t* Status, char* Line);
+void Reconnect_routine(status_flags_t* Status, Wifi_reconnect_t* Wifi_timers);
+void Get_states_routine(status_flags_t* Status, const char* address);
+
+ /************************************* SETUP ************************************/
+void setup() 
+{
+  Serial.begin(9600);
+  pinMode(2, OUTPUT); // signal LED
+  
+  /***************************** WiFi Connection *****************************/
+  WiFi.begin(ssid, password);
+  
+  Serial.println("\nConnecting to WiFi network " + (String)ssid);
+  while ((WiFi.status() != WL_CONNECTED) && (WiFi_conect_tries &#60;= WIFI_CONNECT_TIMEOUT)) 
+  {
+    digitalWrite(2, !(digitalRead(2)));               // LED Blinking during connection
+    delay(1000);
+    Serial.print("."); 
+    WiFi_conect_tries++;
+  } 
+
+  if(WiFi_conect_tries &#62;= WIFI_CONNECT_TIMEOUT)
+  {
+    Serial.println("No WiFi connection\nESP-01 is Creating an Acess Point");
+    Serial.println("Network Name: " + (String)AccessPoint_name);
+    Serial.println("Network Password: " + (String)AccessPoint_password);
+    WiFi.softAP(AccessPoint_name, AccessPoint_password);
+    Status.WiFi_Connected = 0;
+    digitalWrite(2, HIGH);                              //  NO WiFi! Turn OFF the LED
+  }
+  else
+  {
+    Serial.println("\nConnected to WiFi");   
+    Serial.print("Local IP: ");
+    Serial.println(WiFi.localIP());                   
+    digitalWrite(2, LOW);                               // WiFi connected! Turn ON the LED
+    Get_Ext_IP(externalIP, global_IP_Server);
+    Serial.print("WAN IP: ");
+    Serial.println(externalIP);
+    POST_Ext_IP(initAddress, externalIP, externalIP_password);
+    Status.WiFi_Connected = 1;
+    server.on("/SET", HTTP_POST, handlePOST);   /* Call the 'handlePOST' function when a POST request is made to URI "/SET". Reference: https://tttapa.github.io/ESP8266/Chap10%20-%20Simple%20Web%20Server.html LOOK FOR: &#60;form action="/login" method="POST"&#62; */
+    server.on("/", handleEMPTY);
+    server.begin();                           // Actually start the server
+    Serial.println("HTTP server started");
+  } 
+}
+
+/************************************* LOOP ************************************/
+void loop() 
+{
+  UART_routine(&Status, Comand_line);         // Work with UART Comands received from Arduino
+  Reconnect_routine(&Status, &Wifi_timers);   // WiFi reconnection will be implemented in the case of missing connection
+  Get_states_routine(&Status, Get_states_addr);
+  //server.handleClient();                      // Listen for HTTP requests from clients
+  delay(1);
+}
+
+void UART_routine(status_flags_t* Status, char* Line)
+{
+  if(Serial.available() &#62; 0)
+  {
+      Line[i] = Serial.read();
+
+      if(Line[i] == '\n')
+      {
+        Line[i-1] = '\0';
+        Status-&#62;string_received = 1;
+        i = 0;
+      }
+      else
+        i++;
+  }
+  /************* Parcing the Line ************/
+  if(Status-&#62;string_received == 1)
+  {
+    //Serial.println(Line);
+    if(!strcmp(Line, "alive?")) // Func returns: 0 - the contents of both strings are equal; &#60;0 - the first character that does not match has a lower value in ptr1 than in ptr2; &#62;0 - the first character that does not match has a greater value in ptr1 than in ptr2
+    {
+      Serial.println("YES");
+    }
+    else
+    {
+      if((Line[0] == 'p') && (Line[1] == 'o') && (Line[2] == 's') && (Line[3] == 't') && isDigit(Line[4]) && isDigit(Line[5]) && isDigit(Line[6]) && (isDigit(Line[7])) && isDigit(Line[8])) // We have received a post comand
+      {
+        send_POST(Line);
+      }
+      else
+      {
+        if(!strcmp(Line, "ret_time"))
+          Get_time(Status);
+        else
+        {
+          Serial.println("ERR");
+        }
+      }
+    }
+    
+    memset(Line, 0, sizeof(Line)); // flush the array
+    Status-&#62;string_received = 0;
+  }
+}
+
+void Reconnect_routine(status_flags_t* Status, Wifi_reconnect_t* Wifi_timers)
+{
+  if(Status-&#62;WiFi_Connected == 0)              // if WiFi connection is missing
+  {
+    if(Status-&#62;AP_Created == 0)                // if the AP was not created
+    {
+      Serial.println("No WiFi connection\nESP-01 is Creating an Acess Point");
+      Serial.println("Network Name: " + (String)AccessPoint_name);
+      Serial.println("Network Password: " + (String)AccessPoint_password);
+      WiFi.softAP(AccessPoint_name, AccessPoint_password);
+      Status-&#62;AP_Created = 1;
+    }
+    
+    Wifi_timers-&#62;blink_timer++;
+    Wifi_timers-&#62;tries_timer++;
+    //Serial.println(blink_timer);
+/*************************** No WiFi = blinkng with period of BLINK_PERIOD **********************/
+    if((Wifi_timers-&#62;blink_timer &#62;= 0) && (Wifi_timers-&#62;blink_timer &#60;= BLINK_TIME))
+    {
+      digitalWrite(2, LOW); // aus
+    }
+    else 
+    {
+      if((Wifi_timers-&#62;blink_timer &#62; BLINK_TIME) &&(Wifi_timers-&#62;blink_timer &#60; BLINK_PERIOD))
+      {
+        digitalWrite(2, HIGH); // ein
+      }
+      else 
+      {
+        if(Wifi_timers-&#62;blink_timer &#62;= BLINK_PERIOD)
+        {
+          Wifi_timers-&#62;blink_timer = 0;
+        }
+      }
+    }
+
+/*************************** Tries to connect to the Wifi Again **********************/
+    if(Wifi_timers-&#62;tries_timer &#62;= WIFI_CONNECTION_INTERVAL)
+    {
+      if(Wifi_timers-&#62;delay_timer == 0)      // if we are not waiting for a connection NOW
+      {
+        Serial.println("WiFi Connection with network " + (String)ssid + " try");  // Start a connection
+        WiFi.begin(ssid, password);
+      }
+
+      Wifi_timers-&#62;delay_timer++;
+      if(Wifi_timers-&#62;delay_timer &#62;= WIFI_WAIT_DELAY)  // delay is finished
+      {
+        if(Wifi_timers-&#62;check_number &#60; WIFI_CONNECTION_CHECKS)  // if we are not checking WiFi too long
+        {
+          if(WiFi.status() == WL_CONNECTED)
+          {
+            Serial.println("\nConnected to WiFi network " + (String)ssid);   
+            Serial.print("Local IP: ");
+            Serial.println(WiFi.localIP());                   
+            digitalWrite(2, LOW);                               // WiFi connected! Turn ON the LED
+            Get_Ext_IP(externalIP, global_IP_Server);
+            Serial.print("WAN IP: ");
+            Serial.println(externalIP);
+            POST_Ext_IP(initAddress, externalIP, externalIP_password);
+            Status-&#62;WiFi_Connected = 1;
+            Status-&#62;AP_Created = 0;
+            
+            Wifi_timers-&#62;tries_timer = 0;
+            Wifi_timers-&#62;delay_timer = 0;
+            Wifi_timers-&#62;check_number = 0;
+          }
+        }
+        else                    // Return to being an AP
+        {
+            WiFi.softAP(AccessPoint_name, AccessPoint_password);
+            Wifi_timers-&#62;tries_timer = 0;
+            Wifi_timers-&#62;delay_timer = 0;
+            Wifi_timers-&#62;check_number = 0;
+        }
+        Wifi_timers-&#62;check_number++;
+      }
+    }
+  }
+}
+
+/*
+ * Each GET_STATES_INTERVAL miliseconds - recuest to the Website
+ */
+void Get_states_routine(status_flags_t* Status, const char* address)
+{
+  Get_states_timer++;
+  if(Get_states_timer &#62;= GET_STATES_INTERVAL)
+  {
+    Get_Ampel_states(Status, address);
+    Get_states_timer = 0;
+  }
+}
+
+					</code>
+					</pre>
+
+				<!-- Footer -->
+					<footer id="footer">
+						<div class="inner">
+							<section>
+								<h2>Kontakte</h2>
+								<ul class="icons">
+									<li><a href="https://www.linkedin.com/in/bohdan-ko/" class="icon brands style2 fa-linkedin"><span class="label">LinkedIn</span></a></li>
+									<!-- <li><a href="#" class="icon brands style2 fa-facebook-f"><span class="label">Facebook</span></a></li> -->
+									<li><a href="https://www.instagram.com/bohdan_ko1/" class="icon brands style2 fa-instagram"><span class="label">Instagram</span></a></li>
+									<li><a href="tel:+4915203957756" class="icon solid style2 fa-phone"><span class="label">Phone</span></a></li>
+									<li><a href="mailto:bohdankondratenko@gmail.com" class="icon solid style2 fa-envelope"><span class="label">Email</span></a></li>
+								</ul>
+							</section>
+							<ul class="copyright">
+								<li>&copy; Untitled. All rights reserved</li><li>Design: <a href="http://html5up.net">HTML5 UP</a></li>
+							</ul>
+						</div>
+					</footer>
+
+			</div>
+
+		<!-- Scripts -->
+			<script src="../../assets/js/jquery.min.js"></script>
+			<script src="../../assets/js/browser.min.js"></script>
+			<script src="../../assets/js/breakpoints.min.js"></script>
+			<script src="../../assets/js/util.js"></script>
+			<script src="../../assets/js/main.js"></script>
+			<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/prism.min.js"></script>
+
+	</body>
+</html>

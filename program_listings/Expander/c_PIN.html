@@ -1,0 +1,1581 @@
+﻿<!DOCTYPE HTML>
+<!--
+	Template Phantom by HTML5 UP
+	Downloaded from html5up.net | @ajlkn
+	Changed by Bohdan Kondratenko for Job Application Purposes
+-->
+<html>
+	<head>
+		<title>PIN.c</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+		<link rel="stylesheet" href="../../assets/css/main.css" />
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/themes/prism.min.css"/>
+		<noscript><link rel="stylesheet" href="../../assets/css/noscript.css" /></noscript>
+	</head>
+
+	<body class="is-preload">
+
+		<button onclick="history.back()" id="arrow_back_outline" title="Back">
+			<span id="arrow_back"></span>
+		</button>
+
+		<button onclick="topFunction()" id="arrow_top_outline" title="Scroll up">
+			<span id="arrow_top"></span>
+		</button>
+
+		<!-- Wrapper -->
+			<div id="wrapper">
+
+				<!-- Header -->
+					<header id="header">
+						<div class="inner">
+
+							<!-- Logo -->
+								<a href="../../index.html" class="logo">
+									<span class="symbol"><img src="../../images/logo.svg" alt="" /></span><span class="title">Bohdan Kondratenko</span>
+								</a>
+
+						</div>
+					</header>
+
+				<!-- Main -->
+				<h2>PIN.c</h2>
+					<pre>
+					<code class="language-clike">
+					/*
+ * PIN_functions.c
+ *
+ *  Created on: 26 мая 2018 г.
+ *      Author: Bohdan
+ */
+
+#include "main.h"
+#include "stm32f4xx_hal.h"
+#include "My_types.h"
+#include "PIN_functions.h"
+#include "tim.h"
+#include "gpio.h"
+
+volatile uint16_t tim_9_period;
+volatile uint16_t tim_9_pw_rate_chan1;
+volatile uint16_t tim_9_pw_rate_chan2;
+Work_state_t Measure_1 = OFF, Measure_2 = OFF;
+
+/* Current Sensor State Control (connected / disconnected)
+ * Parameters:
+ *    switch_numb - switch number (1...9)
+ *    State - future state of output (ON/OFF)
+ */
+void curr_switch_lowhigh(curr_sens_t switch_numb, SW_state_t State)
+{
+	switch(switch_numb)
+	{
+		case CURR_SENS_1:
+		{
+			if (State == HIGH)
+				HAL_GPIO_WritePin(CurrSwitch1_GPIO_Port, CurrSwitch1_Pin, GPIO_PIN_SET);
+			else
+				HAL_GPIO_WritePin(CurrSwitch1_GPIO_Port, CurrSwitch1_Pin, GPIO_PIN_RESET);
+		}break;
+
+		case CURR_SENS_2:
+		{
+			if (State == HIGH)
+				HAL_GPIO_WritePin(CurrSwitch2_GPIO_Port, CurrSwitch2_Pin, GPIO_PIN_SET);
+			else
+				HAL_GPIO_WritePin(CurrSwitch2_GPIO_Port, CurrSwitch2_Pin, GPIO_PIN_RESET);
+		}break;
+
+		case CURR_SENS_3:
+		{
+			if (State == HIGH)
+				HAL_GPIO_WritePin(CurrSwitch3_GPIO_Port, CurrSwitch3_Pin, GPIO_PIN_SET);
+			else
+				HAL_GPIO_WritePin(CurrSwitch3_GPIO_Port, CurrSwitch3_Pin, GPIO_PIN_RESET);
+		}break;
+
+		case CURR_SENS_4:
+		{
+			if (State == HIGH)
+				HAL_GPIO_WritePin(CurrSwitch4_GPIO_Port, CurrSwitch4_Pin, GPIO_PIN_SET);
+			else
+				HAL_GPIO_WritePin(CurrSwitch4_GPIO_Port, CurrSwitch4_Pin, GPIO_PIN_RESET);
+		}break;
+
+		case CURR_SENS_5:
+		{
+			if (State == HIGH)
+				HAL_GPIO_WritePin(CurrSwitch5_GPIO_Port, CurrSwitch5_Pin, GPIO_PIN_SET);
+			else
+				HAL_GPIO_WritePin(CurrSwitch5_GPIO_Port, CurrSwitch5_Pin, GPIO_PIN_RESET);
+		}break;
+
+		case CURR_SENS_6:
+		{
+			if (State == HIGH)
+				HAL_GPIO_WritePin(CurrSwitch6_GPIO_Port, CurrSwitch6_Pin, GPIO_PIN_SET);
+			else
+				HAL_GPIO_WritePin(CurrSwitch6_GPIO_Port, CurrSwitch6_Pin, GPIO_PIN_RESET);
+		}break;
+
+		case CURR_SENS_7:
+		{
+			if (State == HIGH)
+				HAL_GPIO_WritePin(CurrSwitch7_GPIO_Port, CurrSwitch7_Pin, GPIO_PIN_SET);
+			else
+				HAL_GPIO_WritePin(CurrSwitch7_GPIO_Port, CurrSwitch7_Pin, GPIO_PIN_RESET);
+		}break;
+
+		case CURR_SENS_8:
+		{
+			if (State == HIGH)
+				HAL_GPIO_WritePin(CurrSwitch8_GPIO_Port, CurrSwitch8_Pin, GPIO_PIN_SET);
+			else
+				HAL_GPIO_WritePin(CurrSwitch8_GPIO_Port, CurrSwitch8_Pin, GPIO_PIN_RESET);
+		}break;
+
+		case CURR_SENS_9:
+		{
+			if (State == HIGH)
+				HAL_GPIO_WritePin(CurrSwitch9_GPIO_Port, CurrSwitch9_Pin, GPIO_PIN_SET);
+			else
+				HAL_GPIO_WritePin(CurrSwitch9_GPIO_Port, CurrSwitch9_Pin, GPIO_PIN_RESET);
+		}break;
+	}
+}
+
+/* Function for setting the current measurements resolution
+ * Parameters:
+ * 		SKZ - RMS value, according to it we make decision about required changes.
+ * 		state - a pointer to the current state. Changes or remains unchanged during the function
+ */
+void cur_set_resolution(float* SKZ, SW_state_t* state)
+{
+	for(uint8_t i = 0; i &#60; 24; i++)
+	{
+		if(state[i] == LOW && SKZ[i] &#60;= LOW_BORDER) // якщо вимірювання грубе і струм маленький
+		{
+			state[i] = HIGH;
+			curr_switch_lowhigh(i, HIGH);
+		}
+		else
+			if(state[i] == HIGH && SKZ[i] &#62;= HIGH_BORDER)
+			{
+				state[i] = LOW;
+				curr_switch_lowhigh(i, LOW);
+			}
+	}
+}
+
+/* Function of connecting/disconnecting to the sensor (temperature sensor pair) (Chip Select)
+ * Parameters:
+ *    temp_sens_numb - number of the sensor (pair of sensors) current (1...12)
+ *    State - the state in which it must be translated (ON = chip select/OFF = chip remove selection)
+ */
+void chip_sel_temp_sens(temp_sens_t temp_sens_numb, Work_state_t State)
+{
+	switch(temp_sens_numb)
+	{
+		case TEMP_SENS_1:
+		{
+			if (State == ON)
+				HAL_GPIO_WritePin(__CS1_GPIO_Port, __CS1_Pin, GPIO_PIN_RESET);
+			else
+				HAL_GPIO_WritePin(__CS1_GPIO_Port, __CS1_Pin, GPIO_PIN_SET);
+		} break;
+
+		case TEMP_SENS_2:
+		{
+			if (State == ON)
+				HAL_GPIO_WritePin(__CS2_GPIO_Port, __CS2_Pin, GPIO_PIN_RESET);
+			else
+				HAL_GPIO_WritePin(__CS2_GPIO_Port, __CS2_Pin, GPIO_PIN_SET);
+		} break;
+
+		case TEMP_SENS_3:
+		{
+			if (State == ON)
+				HAL_GPIO_WritePin(__CS3_GPIO_Port, __CS3_Pin, GPIO_PIN_RESET);
+			else
+				HAL_GPIO_WritePin(__CS3_GPIO_Port, __CS3_Pin, GPIO_PIN_SET);
+		} break;
+
+		case TEMP_SENS_4:
+		{
+			if (State == ON)
+				HAL_GPIO_WritePin(__CS4_GPIO_Port, __CS4_Pin, GPIO_PIN_RESET);
+			else
+				HAL_GPIO_WritePin(__CS4_GPIO_Port, __CS4_Pin, GPIO_PIN_SET);
+		} break;
+
+		case TEMP_SENS_5:
+		{
+			if (State == ON)
+				HAL_GPIO_WritePin(__CS5_GPIO_Port, __CS5_Pin, GPIO_PIN_RESET);
+			else
+				HAL_GPIO_WritePin(__CS5_GPIO_Port, __CS5_Pin, GPIO_PIN_SET);
+		} break;
+
+		case TEMP_SENS_6:
+		{
+			if (State == ON)
+				HAL_GPIO_WritePin(__CS6_GPIO_Port, __CS6_Pin, GPIO_PIN_RESET);
+			else
+				HAL_GPIO_WritePin(__CS6_GPIO_Port, __CS6_Pin, GPIO_PIN_SET);
+		} break;
+
+		case TEMP_SENS_7:
+		{
+			if (State == ON)
+				HAL_GPIO_WritePin(__CS7_GPIO_Port, __CS7_Pin, GPIO_PIN_RESET);
+			else
+				HAL_GPIO_WritePin(__CS7_GPIO_Port, __CS7_Pin, GPIO_PIN_SET);
+		} break;
+
+		case TEMP_SENS_8:
+		{
+			if (State == ON)
+				HAL_GPIO_WritePin(__CS8_GPIO_Port, __CS8_Pin, GPIO_PIN_RESET);
+			else
+				HAL_GPIO_WritePin(__CS8_GPIO_Port, __CS8_Pin, GPIO_PIN_SET);
+		} break;
+
+		case TEMP_SENS_9:
+		{
+			if (State == ON)
+				HAL_GPIO_WritePin(__CS9_GPIO_Port, __CS9_Pin, GPIO_PIN_RESET);
+			else
+				HAL_GPIO_WritePin(__CS9_GPIO_Port, __CS9_Pin, GPIO_PIN_SET);
+		} break;
+
+		case TEMP_SENS_10:
+		{
+			if (State == ON)
+				HAL_GPIO_WritePin(__CS10_GPIO_Port, __CS10_Pin, GPIO_PIN_RESET);
+			else
+				HAL_GPIO_WritePin(__CS10_GPIO_Port, __CS10_Pin, GPIO_PIN_SET);
+		} break;
+
+		case TEMP_SENS_11:
+		{
+			if (State == ON)
+				HAL_GPIO_WritePin(__CS11_GPIO_Port, __CS11_Pin, GPIO_PIN_RESET);
+			else
+				HAL_GPIO_WritePin(__CS11_GPIO_Port, __CS11_Pin, GPIO_PIN_SET);
+		} break;
+
+		case TEMP_SENS_12:
+		{
+			if (State == ON)
+				HAL_GPIO_WritePin(__CS12_GPIO_Port, __CS12_Pin, GPIO_PIN_RESET);
+			else
+				HAL_GPIO_WritePin(__CS12_GPIO_Port, __CS12_Pin, GPIO_PIN_SET);
+		} break;
+	}
+}
+
+/* Function for switching channels to measuring state
+ * Parameters:
+ * 	  heat_elem - heating element to set the measure mode
+ * 	  PW_rate - not rate, but state On or Off
+ */
+void heat_el_set_measure(heat_el_t heat_elem, uint16_t PW_rate, uint8_t ON_OFF_mask_item)
+{
+	switch(heat_elem)
+	{
+					/* ДАВАЧ СТРУМУ 1 */
+		case PWM1:
+		{
+			if (ON_OFF_mask_item == 1)
+			{
+				if(PW_rate &#62; 0)
+				{
+					Measure_1 = ON;
+					HAL_GPIO_WritePin(PWM1_GPIO_Port, PWM1_Pin, GPIO_PIN_SET);
+				}
+				else
+				{
+					Measure_1 = ON;
+					HAL_GPIO_WritePin(PWM1_GPIO_Port, PWM1_Pin, GPIO_PIN_RESET);
+				}
+			}
+			else
+			{
+				Measure_1 = ON;
+				HAL_GPIO_WritePin(PWM1_GPIO_Port, PWM1_Pin, GPIO_PIN_RESET);
+			}
+		}break;
+
+		case PWM2:
+		{
+			if (ON_OFF_mask_item == 1)
+			{
+				if (PW_rate &#62; 0)
+				{
+					Measure_2 = ON;
+					HAL_GPIO_WritePin(PWM2_GPIO_Port, PWM2_Pin, GPIO_PIN_SET);
+				}
+				else
+				{
+					Measure_2 = ON;
+					HAL_GPIO_WritePin(PWM2_GPIO_Port, PWM2_Pin, GPIO_PIN_RESET);
+				}
+			}
+			else
+			{
+				Measure_2 = ON;
+				HAL_GPIO_WritePin(PWM2_GPIO_Port, PWM2_Pin, GPIO_PIN_RESET);
+			}
+		}break;
+
+		case PWM3:
+		{
+			if (ON_OFF_mask_item == 1)
+			{
+				if(PW_rate &#62; 0)
+					detach_pin(PWM3_GPIO_Port, PWM3_Pin, GPIO_PIN_SET);
+				else
+					detach_pin(PWM3_GPIO_Port, PWM3_Pin, GPIO_PIN_RESET);
+			}
+			else
+				detach_pin(PWM3_GPIO_Port, PWM3_Pin, GPIO_PIN_RESET);
+		}break;
+
+					/* ДАВАЧ СТРУМУ 2 */
+		case PWM4:
+		{
+			if (ON_OFF_mask_item == 1)
+			{
+				if(PW_rate &#62; 0)
+					detach_pin(PWM4_GPIO_Port, PWM4_Pin, GPIO_PIN_SET);
+				else
+					detach_pin(PWM4_GPIO_Port, PWM4_Pin, GPIO_PIN_RESET);
+			}
+			else
+				detach_pin(PWM4_GPIO_Port, PWM4_Pin, GPIO_PIN_RESET);
+		}break;
+
+		case PWM5:
+		{
+			if (ON_OFF_mask_item == 1)
+			{
+				if(PW_rate &#62; 0)
+					detach_pin(PWM5_GPIO_Port, PWM5_Pin, GPIO_PIN_SET);
+				else
+					detach_pin(PWM5_GPIO_Port, PWM5_Pin, GPIO_PIN_RESET);
+			}
+			else
+				detach_pin(PWM5_GPIO_Port, PWM5_Pin, GPIO_PIN_RESET);
+		}break;
+
+		case PWM6:
+		{
+			if (ON_OFF_mask_item == 1)
+			{
+				if(PW_rate &#62; 0)
+					detach_pin(PWM6_GPIO_Port, PWM6_Pin, GPIO_PIN_SET);
+				else
+					detach_pin(PWM6_GPIO_Port, PWM6_Pin, GPIO_PIN_RESET);
+			}
+			else
+				detach_pin(PWM6_GPIO_Port, PWM6_Pin, GPIO_PIN_RESET);
+		}break;
+
+					/* ДАВАЧ СТРУМУ 3 */
+		case PWM7:
+		{
+			if (ON_OFF_mask_item == 1)
+			{
+				if(PW_rate &#62; 0)
+					detach_pin(PWM7_GPIO_Port, PWM7_Pin, GPIO_PIN_SET);
+				else
+					detach_pin(PWM7_GPIO_Port, PWM7_Pin, GPIO_PIN_RESET);
+			}
+			else
+				detach_pin(PWM7_GPIO_Port, PWM7_Pin, GPIO_PIN_RESET);
+		}break;
+
+		case PWM8:
+		{
+			if (ON_OFF_mask_item == 1)
+			{
+				if(PW_rate &#62; 0)
+					detach_pin(PWM8_GPIO_Port, PWM8_Pin, GPIO_PIN_SET);
+				else
+					detach_pin(PWM8_GPIO_Port, PWM8_Pin, GPIO_PIN_RESET);
+			}
+			else
+				detach_pin(PWM8_GPIO_Port, PWM8_Pin, GPIO_PIN_RESET);
+		}break;
+
+					/* ДАВАЧ СТРУМУ 4 */
+		case PWM9:
+		{
+			if (ON_OFF_mask_item == 1)
+			{
+				if(PW_rate &#62; 0)
+					detach_pin(PWM9_GPIO_Port, PWM9_Pin, GPIO_PIN_SET);
+				else
+					detach_pin(PWM9_GPIO_Port, PWM9_Pin, GPIO_PIN_RESET);
+			}
+			else
+				detach_pin(PWM9_GPIO_Port, PWM9_Pin, GPIO_PIN_RESET);
+		}break;
+
+		case PWM10:
+		{
+			if (ON_OFF_mask_item == 1)
+			{
+				if(PW_rate &#62; 0)
+					detach_pin(PWM10_GPIO_Port, PWM10_Pin, GPIO_PIN_SET);
+				else
+					detach_pin(PWM10_GPIO_Port, PWM10_Pin, GPIO_PIN_RESET);
+			}
+			else
+				detach_pin(PWM10_GPIO_Port, PWM10_Pin, GPIO_PIN_RESET);
+		}break;
+
+		case PWM11:
+		{
+			if (ON_OFF_mask_item == 1)
+			{
+				if(PW_rate &#62; 0)
+					detach_pin(PWM11_GPIO_Port, PWM11_Pin, GPIO_PIN_SET);
+				else
+					detach_pin(PWM11_GPIO_Port, PWM11_Pin, GPIO_PIN_RESET);
+			}
+			else
+				detach_pin(PWM11_GPIO_Port, PWM11_Pin, GPIO_PIN_RESET);
+		}break;
+
+					/* ДАВАЧ СТРУМУ 5 */
+		case PWM12:
+		{
+			if (ON_OFF_mask_item == 1)
+			{
+				if(PW_rate &#62; 0)
+					detach_pin(PWM12_GPIO_Port, PWM12_Pin, GPIO_PIN_SET);
+				else
+					detach_pin(PWM12_GPIO_Port, PWM12_Pin, GPIO_PIN_RESET);
+			}
+			else
+				detach_pin(PWM12_GPIO_Port, PWM12_Pin, GPIO_PIN_RESET);
+		}break;
+
+		case PWM13:
+		{
+			if (ON_OFF_mask_item == 1)
+			{
+				if(PW_rate &#62; 0)
+					detach_pin(PWM13_GPIO_Port, PWM13_Pin, GPIO_PIN_SET);
+				else
+					detach_pin(PWM13_GPIO_Port, PWM13_Pin, GPIO_PIN_RESET);
+			}
+			else
+				detach_pin(PWM13_GPIO_Port, PWM13_Pin, GPIO_PIN_RESET);
+		}break;
+
+		case PWM14:
+		{
+			if (ON_OFF_mask_item == 1)
+			{
+				if(PW_rate &#62; 0)
+					detach_pin(PWM14_GPIO_Port, PWM14_Pin, GPIO_PIN_SET);
+				else
+					detach_pin(PWM14_GPIO_Port, PWM14_Pin, GPIO_PIN_RESET);
+			}
+			else
+				detach_pin(PWM14_GPIO_Port, PWM14_Pin, GPIO_PIN_RESET);
+		}break;
+
+					/* ДАВАЧ СТРУМУ 6 */
+		case PWM15:
+		{
+			if (ON_OFF_mask_item == 1)
+			{
+				if(PW_rate &#62; 0)
+					detach_pin(PWM15_GPIO_Port, PWM15_Pin, GPIO_PIN_SET);
+				else
+					detach_pin(PWM15_GPIO_Port, PWM15_Pin, GPIO_PIN_RESET);
+			}
+			else
+				detach_pin(PWM15_GPIO_Port, PWM15_Pin, GPIO_PIN_RESET);
+		}break;
+
+		case PWM16:
+		{
+			if (ON_OFF_mask_item == 1)
+			{
+				if(PW_rate &#62; 0)
+					detach_pin(PWM16_GPIO_Port, PWM16_Pin, GPIO_PIN_SET);
+				else
+					detach_pin(PWM16_GPIO_Port, PWM16_Pin, GPIO_PIN_RESET);
+			}
+			else
+				detach_pin(PWM16_GPIO_Port, PWM16_Pin, GPIO_PIN_RESET);
+		}break;
+
+					/* ДАВАЧ СТРУМУ 7 */
+		case PWM17:
+		{
+			if (ON_OFF_mask_item == 1)
+			{
+				if(PW_rate &#62; 0)
+					detach_pin(PWM17_GPIO_Port, PWM17_Pin, GPIO_PIN_SET);
+				else
+					detach_pin(PWM17_GPIO_Port, PWM17_Pin, GPIO_PIN_RESET);
+			}
+			else
+				detach_pin(PWM17_GPIO_Port, PWM17_Pin, GPIO_PIN_RESET);
+		}break;
+
+		case PWM18:
+		{
+			if (ON_OFF_mask_item == 1)
+			{
+				if(PW_rate &#62; 0)
+					detach_pin(PWM18_GPIO_Port, PWM18_Pin, GPIO_PIN_SET);
+				else
+					detach_pin(PWM18_GPIO_Port, PWM18_Pin, GPIO_PIN_RESET);
+			}
+			else
+				detach_pin(PWM18_GPIO_Port, PWM18_Pin, GPIO_PIN_RESET);
+		}break;
+
+		case PWM19:
+		{
+			if (ON_OFF_mask_item == 1)
+			{
+				if(PW_rate &#62; 0)
+					detach_pin(PWM19_GPIO_Port, PWM19_Pin, GPIO_PIN_SET);
+				else
+					detach_pin(PWM19_GPIO_Port, PWM19_Pin, GPIO_PIN_RESET);
+			}
+			else
+				detach_pin(PWM19_GPIO_Port, PWM19_Pin, GPIO_PIN_RESET);
+		}break;
+
+					/* ДАВАЧ СТРУМУ 8 */
+		case PWM20:
+		{
+			if (ON_OFF_mask_item == 1)
+			{
+				if(PW_rate &#62; 0)
+					detach_pin(PWM20_GPIO_Port, PWM20_Pin, GPIO_PIN_SET);
+				else
+					detach_pin(PWM20_GPIO_Port, PWM20_Pin, GPIO_PIN_RESET);
+			}
+			else
+				detach_pin(PWM20_GPIO_Port, PWM20_Pin, GPIO_PIN_RESET);
+		}break;
+
+		case PWM21:
+		{
+			if (ON_OFF_mask_item == 1)
+			{
+				if(PW_rate &#62; 0)
+					detach_pin(PWM21_GPIO_Port, PWM21_Pin, GPIO_PIN_SET);
+				else
+					detach_pin(PWM21_GPIO_Port, PWM21_Pin, GPIO_PIN_RESET);
+			}
+			else
+				detach_pin(PWM21_GPIO_Port, PWM21_Pin, GPIO_PIN_RESET);
+		}break;
+
+		case PWM22:
+		{
+			if (ON_OFF_mask_item == 1)
+			{
+				if(PW_rate &#62; 0)
+					detach_pin(PWM22_GPIO_Port, PWM22_Pin, GPIO_PIN_SET);
+				else
+					detach_pin(PWM22_GPIO_Port, PWM22_Pin, GPIO_PIN_RESET);
+			}
+			else
+				detach_pin(PWM22_GPIO_Port, PWM22_Pin, GPIO_PIN_RESET);
+		}break;
+
+					/* ДАВАЧ СТРУМУ 9 */
+		case PWM23:
+		{
+			if (ON_OFF_mask_item == 1)
+			{
+				if(PW_rate &#62; 0)
+					detach_pin(PWM23_GPIO_Port, PWM23_Pin, GPIO_PIN_SET);
+				else
+					detach_pin(PWM23_GPIO_Port, PWM23_Pin, GPIO_PIN_RESET);
+			}
+			else
+				detach_pin(PWM23_GPIO_Port, PWM23_Pin, GPIO_PIN_RESET);
+		}break;
+
+		case PWM24:
+		{
+			if (ON_OFF_mask_item == 1)
+			{
+				if(PW_rate &#62; 0)
+					detach_pin(PWM24_GPIO_Port, PWM24_Pin, GPIO_PIN_SET);
+				else
+					detach_pin(PWM24_GPIO_Port, PWM24_Pin, GPIO_PIN_RESET);
+			}
+			else
+				detach_pin(PWM24_GPIO_Port, PWM24_Pin, GPIO_PIN_RESET);
+		}break;
+	}
+}
+
+/* Function for resuming PWM mode after measurements
+ * Parameters:
+ * 		heat_elem - number of heating element
+ */
+void heat_el_resume_PWM(void)//heat_el_t* heat_elem)
+{
+	for(heat_el_t i = PWM1; i &#60;= PWM24; i++)
+	{
+		switch(i)
+		{
+		case PWM1:
+			{
+				Measure_1 = OFF;
+			} break;
+		case PWM2:
+			{
+				Measure_2 = OFF;
+			} break;
+		case PWM3:
+			{
+				attach_pin(PWM3_GPIO_Port, PWM3_Pin, GPIO_AF2_TIM3);
+			} break;
+		case PWM4:
+			{
+				attach_pin(PWM4_GPIO_Port, PWM4_Pin, GPIO_AF2_TIM5);
+			} break;
+		case PWM5:
+			{
+				attach_pin(PWM5_GPIO_Port, PWM5_Pin, GPIO_AF2_TIM5);
+			} break;
+		case PWM6:
+			{
+				attach_pin(PWM6_GPIO_Port, PWM6_Pin, GPIO_AF2_TIM5);
+			} break;
+		case PWM7:
+			{
+				attach_pin(PWM7_GPIO_Port, PWM7_Pin, GPIO_AF2_TIM5);
+			} break;
+		case PWM8:
+			{
+				attach_pin(PWM8_GPIO_Port, PWM8_Pin, GPIO_AF1_TIM2);
+			} break;
+		case PWM9:
+			{
+				attach_pin(PWM9_GPIO_Port, PWM9_Pin, GPIO_AF2_TIM3);
+			} break;
+		case PWM10:
+			{
+				attach_pin(PWM10_GPIO_Port, PWM10_Pin, GPIO_AF1_TIM1);
+			} break;
+		case PWM11:
+			{
+				attach_pin(PWM11_GPIO_Port, PWM11_Pin, GPIO_AF1_TIM1);
+			} break;
+		case PWM12:
+			{
+				attach_pin(PWM12_GPIO_Port, PWM12_Pin, GPIO_AF1_TIM1);
+			} break;
+		case PWM13:
+			{
+				attach_pin(PWM13_GPIO_Port, PWM13_Pin, GPIO_AF1_TIM1);
+			} break;
+		case PWM14:
+			{
+				attach_pin(PWM14_GPIO_Port, PWM14_Pin, GPIO_AF1_TIM2);
+			} break;
+		case PWM15:
+			{
+				attach_pin(PWM15_GPIO_Port, PWM15_Pin, GPIO_AF1_TIM2);
+			} break;
+		case PWM16:
+			{
+				attach_pin(PWM16_GPIO_Port, PWM16_Pin, GPIO_AF1_TIM2);
+			} break;
+		case PWM17:
+			{
+				attach_pin(PWM17_GPIO_Port, PWM17_Pin, GPIO_AF2_TIM4);
+			} break;
+		case PWM18:
+			{
+				attach_pin(PWM18_GPIO_Port, PWM18_Pin, GPIO_AF2_TIM4);
+			} break;
+		case PWM19:
+			{
+				attach_pin(PWM19_GPIO_Port, PWM19_Pin, GPIO_AF2_TIM4);
+			} break;
+		case PWM20:
+			{
+				attach_pin(PWM20_GPIO_Port, PWM20_Pin, GPIO_AF2_TIM4);
+			} break;
+		case PWM21:
+			{
+				attach_pin(PWM21_GPIO_Port, PWM21_Pin, GPIO_AF3_TIM8);
+			} break;
+		case PWM22:
+			{
+				attach_pin(PWM22_GPIO_Port, PWM22_Pin, GPIO_AF3_TIM8);
+			} break;
+		case PWM23:
+			{
+				attach_pin(PWM23_GPIO_Port, PWM23_Pin, GPIO_AF3_TIM8);
+			} break;
+		case PWM24:
+			{
+				attach_pin(PWM24_GPIO_Port, PWM24_Pin, GPIO_AF2_TIM3);
+			} break;
+		}
+	}
+}
+
+/* Function for generating PWM of required duty cycle for the heating element
+ * Parameters:
+ * 	  heat_elem - heating element to set the PWM rate.
+ * 	  PW_rate - PWM rate(0...100 %)
+ */
+void heat_elem_set_PW(heat_el_t heat_elem, uint16_t PW_rate, uint8_t ON_OFF_mask_item)
+{
+	switch(heat_elem)
+	{
+					/* ДАВАЧ СТРУМУ 1 */
+		case PWM1:
+		{
+			//HAL_TIM_Base_Start_IT(&htim9);
+			if(ON_OFF_mask_item == 1)
+				tim_9_pw_rate_chan1 = (uint32_t)tim_9_period*PW_rate/100;//PW_rate*64/tim_9_period;
+			else
+				tim_9_pw_rate_chan1 = 0;
+		}break;
+
+		case PWM2:
+		{
+			//HAL_TIM_Base_Start_IT(&htim9);
+			if(ON_OFF_mask_item == 1)
+				tim_9_pw_rate_chan2 = (uint32_t)tim_9_period*PW_rate/100;
+			else
+				tim_9_pw_rate_chan2 = 0;
+		}break;
+
+		case PWM3:
+		{
+			//HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
+			if(ON_OFF_mask_item == 1)
+				TIM3-&#62;CCR3 = TIM3-&#62;ARR*PW_rate/100; // set PW_rate to PWM3
+			else
+				TIM3-&#62;CCR3 = 0;
+		}break;
+
+					/* ДАВАЧ СТРУМУ 2 */
+		case PWM4:
+		{
+			//HAL_TIM_PWM_Start(&htim5, TIM_CHANNEL_1);
+			if(ON_OFF_mask_item == 1)
+				TIM5-&#62;CCR1 = TIM5-&#62;ARR*PW_rate/100; // set PW_rate to PWM4
+			else
+				TIM5-&#62;CCR1 = 0;
+		}break;
+
+		case PWM5:
+		{
+			//HAL_TIM_PWM_Start(&htim5, TIM_CHANNEL_2);
+			if(ON_OFF_mask_item == 1)
+				TIM5-&#62;CCR2 = TIM5-&#62;ARR*PW_rate/100; // set PW_rate to PWM5
+			else
+				TIM5-&#62;CCR2 = 0;
+		}break;
+
+		case PWM6:
+		{
+			//HAL_TIM_PWM_Start(&htim5, TIM_CHANNEL_3);
+			if(ON_OFF_mask_item == 1)
+				TIM5-&#62;CCR3 = TIM5-&#62;ARR*PW_rate/100; // set PW_rate to PWM6
+			else
+				TIM5-&#62;CCR3 = 0;
+		}break;
+
+					/* ДАВАЧ СТРУМУ 3 */
+		case PWM7:
+		{
+			//HAL_TIM_PWM_Start(&htim5, TIM_CHANNEL_4);
+			if(ON_OFF_mask_item == 1)
+				TIM5-&#62;CCR4 = TIM5-&#62;ARR*PW_rate/100; // set PW_rate to PWM7
+			else
+				TIM5-&#62;CCR4 =0;
+		}break;
+
+		case PWM8:
+		{
+			//HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_2);
+			if(ON_OFF_mask_item == 1)
+				TIM2-&#62;CCR2 = TIM2-&#62;ARR*PW_rate/100; // set PW_rate to PWM8
+			else
+				TIM2-&#62;CCR2 = 0;
+		}break;
+
+					/* ДАВАЧ СТРУМУ 4 */
+		case PWM9:
+		{
+			//HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);
+			if(ON_OFF_mask_item == 1)
+				TIM3-&#62;CCR4 = TIM3-&#62;ARR*PW_rate/100; // set PW_rate to PWM9
+			else
+				TIM3-&#62;CCR4 = 0;
+		}break;
+
+		case PWM10:
+		{
+			//HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+			if(ON_OFF_mask_item == 1)
+				TIM1-&#62;CCR1 = TIM1-&#62;ARR*PW_rate/100; // set PW_rate to PWM10
+			else
+				TIM1-&#62;CCR1 = 0;
+		}break;
+
+		case PWM11:
+		{
+			//HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
+			if(ON_OFF_mask_item == 1)
+				TIM1-&#62;CCR2 = TIM1-&#62;ARR*PW_rate/100; // set PW_rate to PWM11
+			else
+				TIM1-&#62;CCR2 = 0;
+		}break;
+
+					/* ДАВАЧ СТРУМУ 5 */
+		case PWM12:
+		{
+			//HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
+			if(ON_OFF_mask_item == 1)
+				TIM1-&#62;CCR3 = TIM1-&#62;ARR*PW_rate/100; // set PW_rate to PWM12
+			else
+				TIM1-&#62;CCR3 = 0;
+		}break;
+
+		case PWM13:
+		{
+			//HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_4);
+			if(ON_OFF_mask_item == 1)
+				TIM1-&#62;CCR4 = TIM1-&#62;ARR*PW_rate/100; // set PW_rate to PWM13
+			else
+				TIM1-&#62;CCR4 = 0;
+		}break;
+
+		case PWM14:
+		{
+			//HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_3);
+			if(ON_OFF_mask_item == 1)
+				TIM2-&#62;CCR3 = TIM2-&#62;ARR*PW_rate/100; // set PW_rate to PWM14
+			else
+				TIM2-&#62;CCR3 = 0;
+		}break;
+
+					/* ДАВАЧ СТРУМУ 6 */
+		case PWM15:
+		{
+			//HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_4);
+			if(ON_OFF_mask_item == 1)
+				TIM2-&#62;CCR4 = TIM2-&#62;ARR*PW_rate/100; // set PW_rate to PWM15
+			else
+				TIM2-&#62;CCR4 = 0;
+		}break;
+
+		case PWM16:
+		{
+			//HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
+			if(ON_OFF_mask_item == 1)
+				TIM2-&#62;CCR1 = TIM2-&#62;ARR*PW_rate/100; // set PW_rate to PWM16
+			else
+				TIM2-&#62;CCR1 = 0;
+		}break;
+
+					/* ДАВАЧ СТРУМУ 7 */
+		case PWM17:
+		{
+			//HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
+			if(ON_OFF_mask_item == 1)
+				TIM4-&#62;CCR1 = TIM4-&#62;ARR*PW_rate/100; // set PW_rate to PWM17
+			else
+				TIM4-&#62;CCR1 = 0;
+		}break;
+
+		case PWM18:
+		{
+			//HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2);
+			if(ON_OFF_mask_item == 1)
+				TIM4-&#62;CCR2 = TIM4-&#62;ARR*PW_rate/100; // set PW_rate to PWM18
+			else
+				TIM4-&#62;CCR2 = 0;
+		}break;
+
+		case PWM19:
+		{
+			//HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_3);
+			if(ON_OFF_mask_item == 1)
+				TIM4-&#62;CCR3 = TIM4-&#62;ARR*PW_rate/100; // set PW_rate to PWM19
+			else
+				TIM4-&#62;CCR3 = 0;
+		}break;
+
+					/* ДАВАЧ СТРУМУ 8 */
+		case PWM20:
+		{
+			//HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_4);
+			if(ON_OFF_mask_item == 1)
+				TIM4-&#62;CCR4 = TIM4-&#62;ARR*PW_rate/100; // set PW_rate to PWM20
+			else
+				TIM4-&#62;CCR4 = 0;
+		}break;
+
+		case PWM21:
+		{
+			//HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_4);
+			if(ON_OFF_mask_item == 1)
+				TIM8-&#62;CCR4 = TIM8-&#62;ARR*PW_rate/100; // set PW_rate to PWM21
+			else
+				TIM8-&#62;CCR4 = 0;
+		}break;
+
+		case PWM22:
+		{
+			//HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_3);
+			if(ON_OFF_mask_item == 1)
+				TIM8-&#62;CCR3 = TIM8-&#62;ARR*PW_rate/100; // set PW_rate to PWM22
+			else
+				TIM8-&#62;CCR3 = 0;
+		}break;
+
+					/* ДАВАЧ СТРУМУ 9 */
+		case PWM23:
+		{
+			//HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
+			if(ON_OFF_mask_item == 1)
+				TIM8-&#62;CCR2 = TIM8-&#62;ARR*PW_rate/100; // set PW_rate to PWM23
+			else
+				TIM8-&#62;CCR2 = 0;
+		}break;
+
+		case PWM24:
+		{
+			//HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
+			if(ON_OFF_mask_item == 1)
+				TIM3-&#62;CCR1 = TIM3-&#62;ARR*PW_rate/100; // set PW_rate to PWM24
+			else
+				TIM3-&#62;CCR1 = 0;
+		}break;
+	}
+}
+
+/* Function for setting the PWM period of the heating elements (all timers at once)
+ * Parameters:
+ * 	  periodms - PWM period value, ms
+ */
+void heat_elem_set_PERIOD(uint16_t periodms)
+{
+	TIM1-&#62;ARR = periodms*5;
+	TIM2-&#62;ARR = periodms*5;
+	TIM3-&#62;ARR = periodms*5;
+	TIM4-&#62;ARR = periodms*5;
+	TIM5-&#62;ARR = periodms*5;
+	TIM8-&#62;ARR = periodms*5;
+	tim_9_period = periodms*5; // Так потрібно для програмного таймера через внутрішні умови :)
+}
+
+/* Function for correct switching of heating elements while measuring current
+ * Parameters:
+ * 	  was_on_last - the number of the heating element that was turned on last time. the number of such variables (array cells)
+ * in the program is equal to the number of current sensors (9)
+ * 	  switch_numb - number of current sensor for which measurement is performed
+ * 	  size - sizeof(was_on_last)
+ */
+void switch_heat_elems(Settings_str* BUFF, heat_el_t* was_on_last, uint8_t size, uint8_t* ON_OFF_mask) //(heat_el_t* was_on_last, curr_sens_t* switch_numb, uint8_t* ON_OFF_mask)
+{
+	uint8_t set_is_done = 0;
+
+	for (uint8_t i = 0; i &#60; size; i++) // cycle through channels of ADC
+	{
+		set_is_done = 0;
+		for(uint8_t j = was_on_last[i]+1; j &#60; was_on_last[i]+24; j++) // find next heat elem, that should be ON for measuring
+		{
+			if(BUFF-&#62;Mask_matr[i][(j)%24] == 1) //&& set_is_done == 0) // (j)%24 - to prevent going beyond the array
+			{
+
+				if(set_is_done == 0)
+				{
+					was_on_last[i] = (heat_el_t)j%24;
+					heat_el_set_measure(was_on_last[i], MAX_PWM, ON_OFF_mask[was_on_last[i]]); // Set max PWM rate if it is not forbidden (ON_OFF_mask)
+					set_is_done = 1;
+				}
+				else
+					heat_el_set_measure((heat_el_t)j%24, MIN_PWM, ON_OFF_mask[was_on_last[i]]);
+//				was_on_last[i] = (heat_el_t)j%24;
+//				if(ON_OFF_mask[was_on_last[i]] == 1)
+//				{
+//					heat_el_set_measure(was_on_last[i], MAX_PWM, ON_OFF_mask[was_on_last[i]]); // Set max PWM rate if it is not forbidden (ON_OFF_mask)
+//					set_is_done = 1;
+//				}
+//				else
+//				{
+//					heat_el_set_measure(was_on_last[i], MIN_PWM, ON_OFF_mask[was_on_last[i]]);
+//					set_is_done = 1;
+//				}
+			}
+			//else
+		    //heat_el_set_measure((j)%24, MIN_PWM, ON_OFF_mask[was_on_last[(j)%24]]);
+			// When the cycle is going to end and we didn`t find any "1" in Mask_matr
+			//if(j%24 &#62;= 24 )
+				//was_on_last[i] = HEL_NO; // so  there is no heat element on this channel
+		}
+	}
+/*	for (uint8_t i = 0; i &#60; 9; i++)
+	{
+	switch(switch_numb[i])
+	{
+		case CURR_SENS_1:
+		{
+			switch(was_on_last[i])
+			{
+				case PWM1:
+				{
+					was_on_last[i] = PWM2;
+					heat_el_set_measure(PWM2, MAX_PWM, ON_OFF_mask[PWM2]);
+					heat_el_set_measure(PWM1, MIN_PWM, ON_OFF_mask[PWM1]);
+					heat_el_set_measure(PWM3, MIN_PWM, ON_OFF_mask[PWM3]);
+				}break;
+				case PWM2:
+				{
+					was_on_last[i] = PWM3;
+					heat_el_set_measure(PWM3, MAX_PWM, ON_OFF_mask[PWM3]);
+					heat_el_set_measure(PWM2, MIN_PWM, ON_OFF_mask[PWM2]);
+					heat_el_set_measure(PWM1, MIN_PWM, ON_OFF_mask[PWM1]);
+				}break;
+
+				case PWM3:
+				{
+					was_on_last[i] = PWM1;
+					heat_el_set_measure(PWM1, MAX_PWM, ON_OFF_mask[PWM1]);
+					heat_el_set_measure(PWM2, MIN_PWM, ON_OFF_mask[PWM2]);
+					heat_el_set_measure(PWM3, MIN_PWM, ON_OFF_mask[PWM3]);
+				}break;
+				default: ;break;
+			}
+		}break;
+
+		case CURR_SENS_2:
+		{
+			switch(was_on_last[i])
+			{
+				case PWM4:
+				{
+					was_on_last[i] = PWM5;
+					heat_el_set_measure(PWM5, MAX_PWM, ON_OFF_mask[PWM5]);
+					heat_el_set_measure(PWM6, MIN_PWM, ON_OFF_mask[PWM6]);
+					heat_el_set_measure(PWM4, MIN_PWM, ON_OFF_mask[PWM4]);
+				}break;
+
+				case PWM5:
+				{
+					was_on_last[i] = PWM6;
+					heat_el_set_measure(PWM6, MAX_PWM, ON_OFF_mask[PWM6]);
+					heat_el_set_measure(PWM5, MIN_PWM, ON_OFF_mask[PWM5]);
+					heat_el_set_measure(PWM4, MIN_PWM, ON_OFF_mask[PWM4]);
+				}break;
+
+				case PWM6:
+				{
+					was_on_last[i] = PWM4;
+					heat_el_set_measure(PWM4, MAX_PWM, ON_OFF_mask[PWM4]);
+					heat_el_set_measure(PWM5, MIN_PWM, ON_OFF_mask[PWM5]);
+					heat_el_set_measure(PWM6, MIN_PWM, ON_OFF_mask[PWM6]);
+				}break;
+				default: ;break;
+			}
+		}break;
+
+		case CURR_SENS_3:
+		{
+			switch(was_on_last[i])
+			{
+				case PWM7:
+				{
+					was_on_last[i] = PWM8;
+					heat_el_set_measure(PWM8, MAX_PWM, ON_OFF_mask[PWM8]);
+					heat_el_set_measure(PWM7, MIN_PWM, ON_OFF_mask[PWM7]);
+				}break;
+
+				case PWM8:
+				{
+					was_on_last[i] = PWM7;
+					heat_el_set_measure(PWM7, MAX_PWM, ON_OFF_mask[PWM7]);
+					heat_el_set_measure(PWM8, MIN_PWM, ON_OFF_mask[PWM8]);
+				}break;
+				default: ;break;
+			}
+		}break;
+
+		case CURR_SENS_4:
+		{
+			switch(was_on_last[i])
+			{
+				case PWM9:
+				{
+					was_on_last[i] = PWM10;
+					heat_el_set_measure(PWM10, MAX_PWM, ON_OFF_mask[PWM10]);
+					heat_el_set_measure(PWM9, MIN_PWM, ON_OFF_mask[PWM9]);
+					heat_el_set_measure(PWM11, MIN_PWM, ON_OFF_mask[PWM11]);
+				}break;
+
+				case PWM10:
+				{
+					was_on_last[i] = PWM11;
+					heat_el_set_measure(PWM11, MAX_PWM, ON_OFF_mask[PWM11]);
+					heat_el_set_measure(PWM9, MIN_PWM, ON_OFF_mask[PWM9]);
+					heat_el_set_measure(PWM10, MIN_PWM, ON_OFF_mask[PWM10]);
+				}break;
+
+				case PWM11:
+				{
+					was_on_last[i] = PWM9;
+					heat_el_set_measure(PWM9, MAX_PWM, ON_OFF_mask[PWM9]);
+					heat_el_set_measure(PWM10, MIN_PWM, ON_OFF_mask[PWM10]);
+					heat_el_set_measure(PWM11, MIN_PWM, ON_OFF_mask[PWM11]);
+				}break;
+				default: ;break;
+			}
+		}break;
+
+		case CURR_SENS_5:
+		{
+			switch(was_on_last[i])
+			{
+				case PWM12:
+				{
+					was_on_last[i] = PWM13;
+					heat_el_set_measure(PWM13, MAX_PWM, ON_OFF_mask[PWM13]);
+					heat_el_set_measure(PWM12, MIN_PWM, ON_OFF_mask[PWM12]);
+					heat_el_set_measure(PWM14, MIN_PWM, ON_OFF_mask[PWM14]);
+				}break;
+
+				case PWM13:
+				{
+					was_on_last[i] = PWM14;
+					heat_el_set_measure(PWM14, MAX_PWM, ON_OFF_mask[PWM14]);
+					heat_el_set_measure(PWM12, MIN_PWM, ON_OFF_mask[PWM12]);
+					heat_el_set_measure(PWM13, MIN_PWM, ON_OFF_mask[PWM13]);
+				}break;
+
+				case PWM14:
+				{
+					was_on_last[i] = PWM12;
+					heat_el_set_measure(PWM12, MAX_PWM, ON_OFF_mask[PWM12]);
+					heat_el_set_measure(PWM14, MIN_PWM, ON_OFF_mask[PWM14]);
+					heat_el_set_measure(PWM13, MIN_PWM, ON_OFF_mask[PWM13]);
+				}break;
+				default: ;break;
+			}
+		}break;
+
+		case CURR_SENS_6:
+		{
+			switch(was_on_last[i])
+			{
+				case PWM15:
+				{
+					was_on_last[i] = PWM16;
+					heat_el_set_measure(PWM16, MAX_PWM, ON_OFF_mask[PWM16]);
+					heat_el_set_measure(PWM15, MIN_PWM, ON_OFF_mask[PWM15]);
+				}break;
+
+				case PWM16:
+				{
+					was_on_last[i] = PWM15;
+					heat_el_set_measure(PWM15, MAX_PWM, ON_OFF_mask[PWM15]);
+					heat_el_set_measure(PWM16, MIN_PWM, ON_OFF_mask[PWM16]);
+				}break;
+				default: ;break;
+			}
+		}break;
+
+		case CURR_SENS_7:
+		{
+			switch(was_on_last[i])
+			{
+				case PWM17:
+				{
+					was_on_last[i] = PWM18;
+					heat_el_set_measure(PWM18, MAX_PWM, ON_OFF_mask[PWM18]);
+					heat_el_set_measure(PWM17, MIN_PWM, ON_OFF_mask[PWM17]);
+					heat_el_set_measure(PWM19, MIN_PWM, ON_OFF_mask[PWM19]);
+				}break;
+
+				case PWM18:
+				{
+					was_on_last[i] = PWM19;
+					heat_el_set_measure(PWM19, MAX_PWM, ON_OFF_mask[PWM19]);
+					heat_el_set_measure(PWM17, MIN_PWM, ON_OFF_mask[PWM17]);
+					heat_el_set_measure(PWM18, MIN_PWM, ON_OFF_mask[PWM18]);
+				}break;
+
+				case PWM19:
+				{
+					was_on_last[i] = PWM17;
+					heat_el_set_measure(PWM17, MAX_PWM, ON_OFF_mask[PWM17]);
+					heat_el_set_measure(PWM19, MIN_PWM, ON_OFF_mask[PWM19]);
+					heat_el_set_measure(PWM18, MIN_PWM, ON_OFF_mask[PWM18]);
+				}break;
+				default: ;break;
+			}
+		}break;
+
+		case CURR_SENS_8:
+		{
+			switch(was_on_last[i])
+			{
+				case PWM20:
+				{
+					was_on_last[i] = PWM21;
+					heat_el_set_measure(PWM21, MAX_PWM, ON_OFF_mask[PWM21]);
+					heat_el_set_measure(PWM22, MIN_PWM, ON_OFF_mask[PWM22]);
+					heat_el_set_measure(PWM20, MIN_PWM, ON_OFF_mask[PWM20]);
+				}break;
+
+				case PWM21:
+				{
+					was_on_last[i] = PWM22;
+					heat_el_set_measure(PWM22, MAX_PWM, ON_OFF_mask[PWM22]);
+					heat_el_set_measure(PWM21, MIN_PWM, ON_OFF_mask[PWM21]);
+					heat_el_set_measure(PWM20, MIN_PWM, ON_OFF_mask[PWM20]);
+				}break;
+
+				case PWM22:
+				{
+					was_on_last[i] = PWM20;
+					heat_el_set_measure(PWM20, MAX_PWM, ON_OFF_mask[PWM20]);
+					heat_el_set_measure(PWM21, MIN_PWM, ON_OFF_mask[PWM21]);
+					heat_el_set_measure(PWM22, MIN_PWM, ON_OFF_mask[PWM22]);
+				}break;
+				default: ;break;
+			}
+		}break;
+
+		case CURR_SENS_9:
+		{
+			switch(was_on_last[i])
+			{
+				case PWM23:
+				{
+					was_on_last[i] = PWM24;
+					heat_el_set_measure(PWM24, MAX_PWM, ON_OFF_mask[PWM24]);
+					heat_el_set_measure(PWM23, MIN_PWM, ON_OFF_mask[PWM23]);
+				}break;
+
+				case PWM24:
+				{
+					was_on_last[i] = PWM23;
+					heat_el_set_measure(PWM23, MAX_PWM, ON_OFF_mask[PWM23]);
+					heat_el_set_measure(PWM24, MIN_PWM, ON_OFF_mask[PWM24]);
+				}break;
+				default: ;break;
+			}
+		}break;
+	}
+	}*/
+}
+
+/* Function to turn on/off all heating elements
+ * Parameters:
+ * 		heat_el_numb - pointer to an array for referring to all elements of the heating. The array is not changing
+ * 		values - pointer to an array with PWM values for each element
+ * 		ON_OFF_mask - a pointer to the matrix with the permission or the prohibition of the operation of the heating element
+ */
+void heat_elems_all_ON(uint16_t* values, uint8_t* ON_OFF_mask)
+{
+	for(heat_el_t i = PWM1; i &#60;= PWM24; i++)
+	{
+		heat_elem_set_PW(i, values[i], ON_OFF_mask[i]); // Возможно и не "а" в последнем аргументе
+	}
+}
+
+/* Function for reading states of digital inputs
+ * Parameters:
+ * 		uint8_t Val - the value of the state of all six linear inputs
+ * 		Format: ХХbb bbbb where Х - unused bit, b - used bit
+ */
+uint8_t Get_Dig_In_States(void)
+{
+	uint8_t Val = 0;
+
+	if(HAL_GPIO_ReadPin(IN6_GPIO_Port, IN6_Pin) == 1)
+		Val |= 1&#60;&#60;6;
+	else
+		Val &= ~1&#60;&#60;6;
+	if(HAL_GPIO_ReadPin(IN5_GPIO_Port, IN5_Pin) == 1)
+		Val |= 1&#60;&#60;5;
+	else
+		Val &= ~1&#60;&#60;5;
+	if(HAL_GPIO_ReadPin(IN4_GPIO_Port, IN4_Pin) == 1)
+		Val |= 1&#60;&#60;4;
+	else
+		Val &= ~1&#60;&#60;4;
+	if(HAL_GPIO_ReadPin(IN3_GPIO_Port, IN3_Pin) == 1)
+		Val |= 1&#60;&#60;3;
+	else
+		Val &= ~1&#60;&#60;3;
+	if(HAL_GPIO_ReadPin(IN2_GPIO_Port, IN2_Pin) == 1)
+		Val |= 1&#60;&#60;2;
+	else
+		Val &= ~1&#60;&#60;2;
+	if(HAL_GPIO_ReadPin(IN1_GPIO_Port, IN1_Pin) == 1)
+		Val |= 1&#60;&#60;1;
+	else
+		Val &= ~1&#60;&#60;1;
+
+	return Val &#62;&#62; 1;
+}
+
+/* Function to enable digital outputs in accordance with the bits of received byte
+ * Parameters:
+ * 		States_Byte - byte, wich encoding the necessary states at the inputs(XXbb bbbb)
+ */
+void Gig_Out_On(uint8_t States_Byte)
+{
+	if((States_Byte & 32) == 32)
+		HAL_GPIO_WritePin(OUT6_GPIO_Port, OUT6_Pin, GPIO_PIN_SET);
+	else
+		HAL_GPIO_WritePin(OUT6_GPIO_Port, OUT6_Pin, GPIO_PIN_RESET);
+	if((States_Byte & 16) == 16)
+		HAL_GPIO_WritePin(OUT5_GPIO_Port, OUT5_Pin, GPIO_PIN_SET);
+	else
+		HAL_GPIO_WritePin(OUT5_GPIO_Port, OUT5_Pin, GPIO_PIN_RESET);
+	if((States_Byte & 8) == 8)
+		HAL_GPIO_WritePin(OUT4_GPIO_Port, OUT4_Pin, GPIO_PIN_SET);
+	else
+		HAL_GPIO_WritePin(OUT4_GPIO_Port, OUT4_Pin, GPIO_PIN_RESET);
+	if((States_Byte & 4) == 4)
+		HAL_GPIO_WritePin(OUT3_GPIO_Port, OUT3_Pin, GPIO_PIN_SET);
+	else
+		HAL_GPIO_WritePin(OUT3_GPIO_Port, OUT3_Pin, GPIO_PIN_RESET);
+	if((States_Byte & 2) == 2)
+		HAL_GPIO_WritePin(OUT2_GPIO_Port, OUT2_Pin, GPIO_PIN_SET);
+	else
+		HAL_GPIO_WritePin(OUT2_GPIO_Port, OUT2_Pin, GPIO_PIN_RESET);
+	if((States_Byte & 1) == 1)
+		HAL_GPIO_WritePin(OUT1_GPIO_Port, OUT1_Pin, GPIO_PIN_SET);
+	else
+		HAL_GPIO_WritePin(OUT1_GPIO_Port, OUT1_Pin, GPIO_PIN_RESET);
+}
+
+/*
+ * Parameters
+ */
+void proceed_ADC_data(int16_t** CS_ADC_1_sorted, int16_t** CS_ADC_3_sorted, int16_t** ADC_1_proceeded, int16_t** ADC_3_proceeded)
+{
+	for(uint8_t i = 0; i &#60; 6; i++)
+	{
+		uint8_t a = 0; // counter for start point search
+		uint8_t c = 0; // counter for filling the arrays
+
+		/********** ADC1**********/
+		while(CS_ADC_1_sorted[i][a] &#60;= 100)
+		{
+			a++; // find first element, for start of sinus
+		}
+		while(c &#60; 20)
+		{
+			ADC_1_proceeded[i][c] = CS_ADC_1_sorted[i][a+c]; // fill the array of proceeded data
+		}
+	}
+
+		/********** ADC3 **********/
+	for(uint8_t i = 0; i &#60; 3; i++)
+	{
+		uint8_t a = 0; // counter for start point search
+		uint8_t c = 0; // counter for filling the arrays
+
+		while(CS_ADC_3_sorted[i][a] &#60;= 100)
+		{
+			a++; // find first element, for start of sinus
+		}
+		while(c &#60; 20)
+		{
+			ADC_3_proceeded[i][c] = CS_ADC_3_sorted[i][a+c]; // fill the array of proceeded data
+		}
+	}
+}
+
+/* Function for DETACHING pin from PWM generation
+ * Parameters:
+ * 		Pin - number of pin for detaching
+ * 		Port - port of pin for detaching
+ * 		State - new state of pin
+ */
+void detach_pin(GPIO_TypeDef* Port, uint16_t Pin,  GPIO_PinState State)
+{
+	GPIO_InitTypeDef GPIO_InitStruct;
+
+	HAL_GPIO_WritePin(Port, Pin, State);
+	GPIO_InitStruct.Pin = Pin;
+	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+	GPIO_InitStruct.Pull = GPIO_NOPULL;
+	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    HAL_GPIO_Init(Port, &GPIO_InitStruct);
+}
+
+/* Function for ATTACHING pin to PWM generation
+ * Parameters:
+ * 		Pin - number of pin for detaching
+ * 		Port - port of pin for detaching
+ * 		State - new state of pin, that will be after attaching
+ */
+void attach_pin(GPIO_TypeDef* Port, uint16_t Pin, uint8_t AF)
+{
+	GPIO_InitTypeDef GPIO_InitStruct;
+
+	HAL_GPIO_WritePin(Port, Pin, GPIO_PIN_SET);
+	GPIO_InitStruct.Pin = Pin;
+	GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+	GPIO_InitStruct.Pull = GPIO_NOPULL;
+	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+	GPIO_InitStruct.Alternate = AF;
+	HAL_GPIO_Init(Port, &GPIO_InitStruct);
+}
+
+/* Procedure for locking pins, to prewent unexpected usage
+ */
+void Lock_PINs(void)
+{
+	HAL_GPIO_LockPin(SPI_ETH_SCK_GPIO_Port, SPI_ETH_SCK_Pin);
+	HAL_GPIO_LockPin(SPI_ETH_MISO_GPIO_Port, SPI_ETH_MISO_Pin);
+	HAL_GPIO_LockPin(SPI_ETH_MOSI_GPIO_Port, SPI_ETH_MOSI_Pin);
+	HAL_GPIO_LockPin(SPI_ETH_CS_GPIO_Port, SPI_ETH_CS_Pin);
+	HAL_GPIO_LockPin(CUR9_GPIO_Port, CUR9_Pin);
+	HAL_GPIO_LockPin(CUR8_GPIO_Port, CUR8_Pin);
+	HAL_GPIO_LockPin(CUR7_GPIO_Port, CUR7_Pin);
+	HAL_GPIO_LockPin(CUR6_GPIO_Port, CUR6_Pin);
+	HAL_GPIO_LockPin(CUR5_GPIO_Port, CUR5_Pin);
+	HAL_GPIO_LockPin(CUR4_GPIO_Port, CUR4_Pin);
+	HAL_GPIO_LockPin(CUR3_GPIO_Port, CUR3_Pin);
+	HAL_GPIO_LockPin(CUR2_GPIO_Port, CUR2_Pin);
+	HAL_GPIO_LockPin(CUR1_GPIO_Port, CUR1_Pin);
+	HAL_GPIO_LockPin(GPIOA, GPIO_PIN_5);
+	HAL_GPIO_LockPin(GPIOB, GPIO_PIN_4);
+	HAL_GPIO_LockPin(GPIOB, GPIO_PIN_5);
+	HAL_GPIO_LockPin(GPIOC, GPIO_PIN_10);
+	HAL_GPIO_LockPin(GPIOC, GPIO_PIN_11);
+	HAL_GPIO_LockPin(GPIOC, GPIO_PIN_12);
+}
+
+/* Procedure for starting all of the timers (in one call)
+ */
+void All_timers_start(void)
+{
+	HAL_TIM_Base_Start_IT(&htim9);
+
+	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
+	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
+	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_4);
+
+	HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
+	HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_2);
+	HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_3);
+	HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_4);
+
+	HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
+	HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
+	HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);
+
+	HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
+	HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2);
+	HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_3);
+	HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_4);
+
+	HAL_TIM_PWM_Start(&htim5, TIM_CHANNEL_1);
+	HAL_TIM_PWM_Start(&htim5, TIM_CHANNEL_2);
+	HAL_TIM_PWM_Start(&htim5, TIM_CHANNEL_3);
+	HAL_TIM_PWM_Start(&htim5, TIM_CHANNEL_4);
+
+	HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);
+	HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_3);
+	HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_4);
+}
+
+/* Function for reading pins that sets the address of device for CAN
+ * Returns:
+ * 		byte with CAN address
+ */
+uint8_t Get_CAN_addr(void)
+{
+	uint8_t Val = 0;
+
+	if (HAL_GPIO_ReadPin(DIP6_GPIO_Port, DIP6_Pin) == 1)
+		Val |= 1 &#60;&#60; 6;
+	else
+		Val &= ~1 &#60;&#60; 6;
+	if (HAL_GPIO_ReadPin(DIP5_GPIO_Port, DIP5_Pin) == 1)
+		Val |= 1 &#60;&#60; 5;
+	else
+		Val &= ~1 &#60;&#60; 5;
+	if (HAL_GPIO_ReadPin(DIP4_GPIO_Port, DIP4_Pin) == 1)
+		Val |= 1 &#60;&#60; 4;
+	else
+		Val &= ~1 &#60;&#60; 4;
+	if (HAL_GPIO_ReadPin(DIP3_GPIO_Port, DIP3_Pin) == 1)
+		Val |= 1 &#60;&#60; 3;
+	else
+		Val &= ~1 &#60;&#60; 3;
+	if (HAL_GPIO_ReadPin(DIP2_GPIO_Port, DIP2_Pin) == 1)
+		Val |= 1 &#60;&#60; 2;
+	else
+		Val &= ~1 &#60;&#60; 2;
+	if (HAL_GPIO_ReadPin(DIP1_GPIO_Port, DIP1_Pin) == 1)
+		Val |= 1 &#60;&#60; 1;
+	else
+		Val &= ~1 &#60;&#60; 1;
+	if (HAL_GPIO_ReadPin(DIP0_GPIO_Port, DIP0_Pin) == 1)
+		Val |= 1 &#60;&#60; 0;
+	else
+		Val &= ~1 &#60;&#60; 0;
+
+	return Val;
+}
+
+					</code>
+					</pre>
+
+				<!-- Footer -->
+					<footer id="footer">
+						<div class="inner">
+							<section>
+								<h2>Kontakte</h2>
+								<ul class="icons">
+									<li><a href="https://www.linkedin.com/in/bohdan-ko/" class="icon brands style2 fa-linkedin"><span class="label">LinkedIn</span></a></li>
+									<!-- <li><a href="#" class="icon brands style2 fa-facebook-f"><span class="label">Facebook</span></a></li> -->
+									<li><a href="https://www.instagram.com/bohdan_ko1/" class="icon brands style2 fa-instagram"><span class="label">Instagram</span></a></li>
+									<li><a href="tel:+4915203957756" class="icon solid style2 fa-phone"><span class="label">Phone</span></a></li>
+									<li><a href="mailto:bohdankondratenko@gmail.com" class="icon solid style2 fa-envelope"><span class="label">Email</span></a></li>
+								</ul>
+							</section>
+							<ul class="copyright">
+								<li>&copy; Untitled. All rights reserved</li><li>Design: <a href="http://html5up.net">HTML5 UP</a></li>
+							</ul>
+						</div>
+					</footer>
+
+			</div>
+
+		<!-- Scripts -->
+			<script src="../../assets/js/jquery.min.js"></script>
+			<script src="../../assets/js/browser.min.js"></script>
+			<script src="../../assets/js/breakpoints.min.js"></script>
+			<script src="../../assets/js/util.js"></script>
+			<script src="../../assets/js/main.js"></script>
+			<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/prism.min.js"></script>
+
+	</body>
+</html>

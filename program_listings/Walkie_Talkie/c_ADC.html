@@ -1,0 +1,173 @@
+﻿<!DOCTYPE HTML>
+<!--
+	Template Phantom by HTML5 UP
+	Downloaded from html5up.net | @ajlkn
+	Changed by Bohdan Kondratenko for Job Application Purposes
+-->
+<html>
+	<head>
+		<title>ADC.c</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+		<link rel="stylesheet" href="../../assets/css/main.css" />
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/themes/prism.min.css"/>
+		<noscript><link rel="stylesheet" href="../../assets/css/noscript.css" /></noscript>
+	</head>
+
+	<body class="is-preload">
+
+		<button onclick="history.back()" id="arrow_back_outline" title="Back">
+			<span id="arrow_back"></span>
+		</button>
+
+		<button onclick="topFunction()" id="arrow_top_outline" title="Scroll up">
+			<span id="arrow_top"></span>
+		</button>
+
+		<!-- Wrapper -->
+			<div id="wrapper">
+
+				<!-- Header -->
+					<header id="header">
+						<div class="inner">
+
+							<!-- Logo -->
+								<a href="../../index.html" class="logo">
+									<span class="symbol"><img src="../../images/logo.svg" alt="" /></span><span class="title">Bohdan Kondratenko</span>
+								</a>
+
+						</div>
+					</header>
+
+				<!-- Main -->
+				<h2>ADC.c</h2>
+				<pre>
+					<code class="language-clike">
+#include "ADC.h"
+
+/* Setting both ADC and Timer 0 channel A to the Mode for sound capturing 
+ * WARNING! Uses Timer 0 channel A
+ * Reason for usage of Tim 0 channel A triggering - triggering frequency can be adjusted to the requirements (TIMA PWM TOP = OCRA)
+ */
+my_bool capture_start(unsigned long freq_HZ)
+{
+	//char debug_str[16];
+	
+  if (freq_HZ &#62; 31250) // if this is true than the Timer will not be able to generate the frequncy
+  {
+     return LOW;
+  }
+	
+  /*********************** ADC Setting ***********************/
+  ADCSRA = 0;           // The registers are being first reset, co clean the pre-settings from Arduino IDE
+  ADCSRA |=  (1&#60;&#60;ADEN) | (1&#60;&#60;ADATE) | (1&#60;&#60;ADIE) | (1&#60;&#60;ADPS1);   // | bit (ADPS0) | bit (ADPS0);  // turn ADC on, want interrupt on completion (switch off ADEN when going on sleep mode)
+  /* ADCSRA Bits:
+   * 7) ADEN: ADC Enable
+   * 6) ADSC: ADC Start Conversion
+   * 5) ADATE: ADC Auto Trigger Enable
+   * 4) ADIF: ADC Interrupt Flag
+   * 3) ADIE: ADC Interrupt Enable
+   * 2-0) ADPS2:0: ADC Prescaler Select Bits (to be adjusted) (division factor between the system clock frequency and the input clock to the ADC) 010 -&#62; 4
+   */
+  
+  ADMUX = 0;
+  ADMUX |= (1&#60;&#60;REFS0) | (1&#60;&#60;ADLAR); //reference source - supply voltage, input to read - Micro, Left alighn for receive (register ADCH)
+  /* ADMUX Bits:
+  * 7-6) REFS1:0: Reference Selection Bits (00 = AREF, internal VREF turned off; 01 = AVCC with external capacitor at AREF pin)
+  * 5) ADLAR: ADC Adjust Result (1 - Left, 0 - Right)
+  * 4)  Res: Reserved Bit
+  * 3-0) MUX3:0: Analog Channel Selection Bits (for my input A0 or AC0 - 0000)
+  */  
+  
+  ADCSRB = 0;
+  ADCSRB |= (1&#60;&#60;ADTS1) | (1&#60;&#60;ADTS0); 
+  /* ADC Control and Status Register
+   * 2-0) ADTSx – ADC Auto Trigger Source 011 - Timer/Counter 0 Compare match A
+   */
+
+  /*********************** TIM0 (channel A) Setting ************************/ 
+  TIMSK0 = 0;
+  TIMSK0 |= (1&#60;&#60;OCIE0A);
+  /* TIMSK0 – Timer/Counter0 Interrupt Mask Register
+   * 2) OCIE0B: Timer/Counter0 Output Compare Match B Interrupt Enable
+   * 1) OCIE0A: Timer/Counter0 Output Compare Match A Interrupt Enable
+   * 0) TOIE0: Timer/Counter0, Overflow Interrupt Enable
+   */ 
+ 
+  
+  TCCR0A = 0;
+  TCCR0B = 0;
+  TCCR0A |= (1&#60;&#60;WGM00) | (1&#60;&#60;WGM01);
+  TCCR0B |= (1&#60;&#60;WGM02);            
+  /* Timer/Counter1 Control Register A and B
+   * 7) ICNC1: Input Capture Noise Canceler
+   * 6) ICES1: Input Capture Edge Select
+   * 5) Reserved Bit 
+   * 4-3) WGM02:0: Waveform Generation Mod 111 - FAST PWM Mode, Top - OCR0A Register 
+   * 2-0) CS12:0: Clock Select 001 - Prescaler 1 (to be adjusted);
+   */
+
+   /*** interrupt frequency (Hz) = (MCU clock speed 16,000,000Hz) / (prescaler * (compare match register + 1)) ***/
+   /* compare match register = (MCU clock speed 16,000,000Hz) / interrupt frequency (Hz) / prescaler - 1 */ 
+   
+  uint8_t Val = F_CPU/freq_HZ/64-1;		// 64 - the prescaler!!
+  OCR0A = Val;
+  Val = OCR0A;
+  
+  //sprintf(debug_str, "OCR0A: %u\n", OCR0A);
+  //print_str(debug_str);
+  
+  /*** Start Conversion! ***/
+  TCNT0 = 0;
+  ADCSRA |= (1&#60;&#60;ADSC);
+  TCCR0B |= (1&#60;&#60;CS01) | (1&#60;&#60;CS00);
+  
+  return HIGH;
+}
+
+void capture_stop(void)
+{
+  ADCSRA = 0;  // turn off ADC
+  
+  //char str[10];
+  //sprintf(str, "\nADC STOP");
+  //print_str(str);
+  
+  //Serial.println();
+  //Serial.println("ADC STOP");
+}
+
+					</code>
+					</pre>
+
+				<!-- Footer -->
+					<footer id="footer">
+						<div class="inner">
+							<section>
+								<h2>Kontakte</h2>
+								<ul class="icons">
+									<li><a href="https://www.linkedin.com/in/bohdan-ko/" class="icon brands style2 fa-linkedin"><span class="label">LinkedIn</span></a></li>
+									<!-- <li><a href="#" class="icon brands style2 fa-facebook-f"><span class="label">Facebook</span></a></li> -->
+									<li><a href="https://www.instagram.com/bohdan_ko1/" class="icon brands style2 fa-instagram"><span class="label">Instagram</span></a></li>
+									<li><a href="tel:+4915203957756" class="icon solid style2 fa-phone"><span class="label">Phone</span></a></li>
+									<li><a href="mailto:bohdankondratenko@gmail.com" class="icon solid style2 fa-envelope"><span class="label">Email</span></a></li>
+								</ul>
+							</section>
+							<ul class="copyright">
+								<li>&copy; Untitled. All rights reserved</li><li>Design: <a href="http://html5up.net">HTML5 UP</a></li>
+							</ul>
+						</div>
+					</footer>
+
+			</div>
+
+		<!-- Scripts -->
+			<script src="../../assets/js/jquery.min.js"></script>
+			<script src="../../assets/js/browser.min.js"></script>
+			<script src="../../assets/js/breakpoints.min.js"></script>
+			<script src="../../assets/js/util.js"></script>
+			<script src="../../assets/js/main.js"></script>
+			<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/prism.min.js"></script>
+
+	</body>
+</html>

@@ -1,0 +1,180 @@
+﻿<!DOCTYPE HTML>
+<!--
+	Template Phantom by HTML5 UP
+	Downloaded from html5up.net | @ajlkn
+	Changed by Bohdan Kondratenko for Job Application Purposes
+-->
+<html>
+	<head>
+		<title>Ring_buffer.c</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+		<link rel="stylesheet" href="../../assets/css/main.css" />
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/themes/prism.min.css"/>
+		<noscript><link rel="stylesheet" href="../../assets/css/noscript.css" /></noscript>
+	</head>
+
+	<body class="is-preload">
+
+		<button onclick="history.back()" id="arrow_back_outline" title="Back">
+			<span id="arrow_back"></span>
+		</button>
+
+		<button onclick="topFunction()" id="arrow_top_outline" title="Scroll up">
+			<span id="arrow_top"></span>
+		</button>
+
+		<!-- Wrapper -->
+			<div id="wrapper">
+
+				<!-- Header -->
+					<header id="header">
+						<div class="inner">
+
+							<!-- Logo -->
+								<a href="../../index.html" class="logo">
+									<span class="symbol"><img src="../../images/logo.svg" alt="" /></span><span class="title">Bohdan Kondratenko</span>
+								</a>
+
+						</div>
+					</header>
+
+				<!-- Main -->
+				<h2>Ring_buffer.c</h2>
+				<pre>
+					<code class="language-clike">
+#include &#60;stdlib.h&#62;
+#include &#60;string.h&#62;
+
+#include "Ring_buffer.h"
+
+/*********************************
+typedef struct
+{
+  uint8_t* samples;
+  uint16_t buffer_size;
+  uint16_t head;
+  uint16_t tail;
+  uint16_t bytes_avail;
+  unsigned long samples_taken_total;
+  my_bool lock;
+} queue_t;
+*********************************/
+
+void init_buffer(queue_t* Buffer, uint16_t samples_amount)
+{
+    Buffer-&#62;samples = (uint8_t*)malloc(samples_amount);
+    Buffer-&#62;buffer_size = samples_amount;
+    Buffer-&#62;bytes_written = 0;
+	Buffer-&#62;samples_taken_total = 0;
+	Buffer-&#62;lock = 0;
+}
+
+/*  Function to find the lesser value between two arguments
+ */
+uint16_t min_val(uint16_t a, uint16_t b)
+{
+  return a &#60; b ? a : b; // if a is smaller than b - return a. Otherwise b
+}
+
+/* inserting a sample into the buffer.
+ * Arguments:
+ *  Buffer - pointer to the Buffer (ring Buffer) we are working with
+ *  data - pointer to the data to be inserted
+ *  Size - amount of bytes to be inserted (max 255 - uint8_t)
+ */
+my_bool put_sample(queue_t* Buffer, volatile uint8_t* data, uint8_t Size)
+{
+	if(Buffer-&#62;lock == 0)
+	{
+		Buffer-&#62;lock = 1;										  // Lock out the buffer to prevent interrupting by other instances during writing
+		if((Buffer-&#62;buffer_size - Buffer-&#62;bytes_written) &#60; Size)  // Checking if there still any free space in the buffer
+		{
+			Buffer-&#62;lock = 0;
+			return LOW;											  // if it's false then the buffer is overflown
+		}
+
+		const uint8_t part1 = min_val(Size, (Buffer-&#62;buffer_size - Buffer-&#62;tail));
+		const uint8_t part2 = Size - part1;
+
+		memcpy((void*)(Buffer-&#62;samples + Buffer-&#62;tail), (const void*)data,           part1);
+		memcpy((void*)Buffer-&#62;samples,                  (const void*)(data + part1), part2);
+
+		Buffer-&#62;tail = (Buffer-&#62;tail + Size) % Buffer-&#62;buffer_size;
+		Buffer-&#62;bytes_written += Size;
+
+		Buffer-&#62;samples_taken_total += Size;    // controlling how many data samples have been taken
+		
+		Buffer-&#62;lock = 0;
+		return HIGH;
+	}
+	else
+		return LOW; // so far there is no noticing if the buffer was locked by the last writing try
+}
+
+/* Getting data out of the ring Buffer
+ *  Arguments: 
+ *    Buffer - pointer to the Buffer (ring Buffer) we are working with
+ *    data - pointer to the variable where the readed data will be stored
+ *    Size - amount of bytes to be readed (max 255 - uint8_t)
+ */
+my_bool get_sample(queue_t* Buffer, uint8_t* data, uint8_t Size)
+{
+	if(Buffer-&#62;lock == 0)
+	{
+		Buffer-&#62;lock = 1;										  // Lock out the buffer to prevent interrupting by other instances during writing
+		if(Buffer-&#62;bytes_written &#60; Size)  // if we want to read more than available - return LOW
+		{
+			Buffer-&#62;lock = 0;	
+			return LOW;
+		}
+
+		const uint8_t part1 = min_val(Size, Buffer-&#62;buffer_size - Buffer-&#62;head);
+		const uint8_t part2 = Size - part1;
+
+		memcpy(data,         Buffer-&#62;samples + Buffer-&#62;head, part1);
+		memcpy(data + part1, Buffer-&#62;samples,                part2);
+
+		Buffer-&#62;head = (Buffer-&#62;head + Size) % Buffer-&#62;buffer_size;
+		Buffer-&#62;bytes_written -= Size;
+		Buffer-&#62;lock = 0;
+		return HIGH;
+	}
+	else
+		return LOW;
+}
+
+					</code>
+					</pre>
+
+				<!-- Footer -->
+					<footer id="footer">
+						<div class="inner">
+							<section>
+								<h2>Kontakte</h2>
+								<ul class="icons">
+									<li><a href="https://www.linkedin.com/in/bohdan-ko/" class="icon brands style2 fa-linkedin"><span class="label">LinkedIn</span></a></li>
+									<!-- <li><a href="#" class="icon brands style2 fa-facebook-f"><span class="label">Facebook</span></a></li> -->
+									<li><a href="https://www.instagram.com/bohdan_ko1/" class="icon brands style2 fa-instagram"><span class="label">Instagram</span></a></li>
+									<li><a href="tel:+4915203957756" class="icon solid style2 fa-phone"><span class="label">Phone</span></a></li>
+									<li><a href="mailto:bohdankondratenko@gmail.com" class="icon solid style2 fa-envelope"><span class="label">Email</span></a></li>
+								</ul>
+							</section>
+							<ul class="copyright">
+								<li>&copy; Untitled. All rights reserved</li><li>Design: <a href="http://html5up.net">HTML5 UP</a></li>
+							</ul>
+						</div>
+					</footer>
+
+			</div>
+
+		<!-- Scripts -->
+			<script src="../../assets/js/jquery.min.js"></script>
+			<script src="../../assets/js/browser.min.js"></script>
+			<script src="../../assets/js/breakpoints.min.js"></script>
+			<script src="../../assets/js/util.js"></script>
+			<script src="../../assets/js/main.js"></script>
+			<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/prism.min.js"></script>
+
+	</body>
+</html>

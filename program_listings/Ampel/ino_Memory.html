@@ -1,0 +1,231 @@
+﻿<!DOCTYPE HTML>
+<!--
+	Template Phantom by HTML5 UP
+	Downloaded from html5up.net | @ajlkn
+	Changed by Bohdan Kondratenko for Job Application Purposes
+-->
+<html>
+	<head>
+		<title>Memory.ino</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+		<link rel="stylesheet" href="../../assets/css/main.css" />
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/themes/prism.min.css"/>
+		<noscript><link rel="stylesheet" href="../../assets/css/noscript.css" /></noscript>
+	</head>
+
+	<body class="is-preload">
+
+		<button onclick="history.back()" id="arrow_back_outline" title="Back">
+			<span id="arrow_back"></span>
+		</button>
+
+		<button onclick="topFunction()" id="arrow_top_outline" title="Scroll up">
+			<span id="arrow_top"></span>
+		</button>
+
+		<!-- Wrapper -->
+			<div id="wrapper">
+
+				<!-- Header -->
+					<header id="header">
+						<div class="inner">
+
+							<!-- Logo -->
+								<a href="../../index.html" class="logo">
+									<span class="symbol"><img src="../../images/logo.svg" alt="" /></span><span class="title">Bohdan Kondratenko</span>
+								</a>
+
+						</div>
+					</header>
+
+				<!-- Main -->
+				<h2>Memory.ino</h2>
+				<pre>
+					<code class="language-clike">
+#include "Memory.h"
+#include &#60;extEEPROM.h&#62;
+
+/* Basically for debug purposes 
+ * Printing of the content of EEPROM Memory modul to the COM Port
+*/
+void Show_Memory(uint32_t startAddr, uint32_t nBytes)
+{
+  Serial.print(F("EEPROM DUMP 0x"));
+  Serial.print(startAddr, HEX);
+  Serial.print(F(" 0x"));
+  Serial.print(nBytes, HEX);
+  Serial.print(F(" "));
+  Serial.print(startAddr);
+  Serial.print(F(" "));
+  Serial.println(nBytes);
+  uint32_t nRows = (nBytes + 15) &#62;&#62; 4;
+
+  uint8_t d[16];
+  for(uint32_t r = 0; r &#60; nRows; r++) 
+  {
+    uint32_t a = startAddr + 16 * r;
+    EEPROM_Board.read(a, d, 16);
+
+    Serial.print(F("0x"));
+    if ( a &#60; 16 * 16 * 16 ) Serial.print(F("0"));
+    if ( a &#60; 16 * 16 ) Serial.print(F("0"));
+    if ( a &#60; 16 ) Serial.print(F("0"));
+    Serial.print(a, HEX); Serial.print(F(" "));
+
+    for(int c = 0; c &#60; 16; c++) 
+    {
+      if(d[c] &#60; 16)
+        Serial.print(F("0"));
+      Serial.print(d[c], HEX);
+      Serial.print(c == 7 ? "  " : " ");
+    }
+    Serial.println(F(""));
+  }
+}
+
+/* Memory Initialisation for the first launch of the memory card ever
+ * Reads data from the memory. If memory cells have never been used before, they contain values of 0xFF (255)
+ * Writes initial values of time (00.00) and offset (1) to the first memory cells of the appropriate memory block.
+ * size of a memory block = 256 bytes;
+ * (Block rewriting algorithm - not necessary the most optimal one. but should work)
+ * if the calculations are right - for 15 years
+ */
+void EEPROM_init(my_time_t* Time_str)   // NOT DEBUGGED
+{
+  byte offset_search_buffer = 0xff;
+  uint8_t memory_used_marker = 0;
+  
+  uint16_t last_written_block = 0xffff;
+  uint32_t write_counter_buffer;
+  uint32_t write_counter_prew = 0;
+
+  // Initial Values for empty memory
+  Time_str-&#62;offset = 0;
+  Time_str-&#62;hours = 0;
+  Time_str-&#62;minutes = 0;
+  Time_str-&#62;memorycell_write_counter = 0;
+  
+  // Hardware EEPROM connection
+  Serial.println("Beginning connection to EEPROM Module");
+  if(EEPROM_Board.begin(EEPROM_Board.twiClock400kHz)) //go fast!
+  {
+    Serial.println("EEPROM Connection Failed! Check EEPROM!");
+    while (1) // Will stop there forever (notification routine - two short blinks of the LED on pin 13)
+    {
+      digitalWrite(13, HIGH);
+      delay(200);
+      digitalWrite(13, LOW);
+      delay(200);
+      digitalWrite(13, HIGH);
+      delay(200);
+      digitalWrite(13, LOW);
+      delay(1500);
+    }
+  }
+  else
+    Serial.println("EEPROM Module connected");
+  
+    /************* Debugging routine!!! ************
+  for(uint16_t i = 0; i &#60; (8*MEM_BLOCK_SIZE); i += MEM_BLOCK_SIZE)
+  {
+    Serial.println("Mem writing ");
+    Time_str-&#62;offset = i/MEM_BLOCK_SIZE;
+    Time_str-&#62;hours = 0xAA;
+    Time_str-&#62;minutes = 0xBB;
+    Time_str-&#62;memorycell_write_counter = ((i/MEM_BLOCK_SIZE)+3)%8;
+    Serial.println("Written Memory cell: " + (String)i);
+    Serial.println("memorycell_write_counter = " + (String)Time_str-&#62;memorycell_write_counter);
+    EEPROM_Board.write(i, (byte*)Time_str, sizeof(*Time_str));
+  }
+  ************ Debugging routine!!! *************/ 
+  
+  //Show_Memory(0, 2048);
+  // Read all bytes with offset variable. if all of them are 0xff - memory board is fresh. if not - find starting point
+  for(uint16_t i = 0; i &#60; (MEM_BLOCK_AMOUNT*MEM_BLOCK_SIZE); i += MEM_BLOCK_SIZE) // i goes trough all firs bytes of the memory blocks. i is the adress of a cell
+  {
+    EEPROM_Board.read(i, &offset_search_buffer, 1);
+    Serial.println("offset_search_buffer = " + (String)offset_search_buffer);
+    if(offset_search_buffer != 0xff)
+    {
+      memory_used_marker++;
+      Serial.println("memory_used_marker = " + (String)memory_used_marker);
+    }
+    
+    EEPROM_Board.read(i+3, (byte*)&write_counter_buffer, 4);
+    if((write_counter_buffer != 0xffffffff) && (write_counter_buffer &#62;= write_counter_prew))
+    {
+      write_counter_prew = write_counter_buffer;
+      Serial.println("write_counter_prew: " + (String)write_counter_prew); // Debug
+      last_written_block = i;
+      Serial.println("last_written_block: " + (String)last_written_block); // Debug
+    }
+    Serial.println("Byte " + String(i) + " value = " + (String)write_counter_buffer + "\n");
+  }
+  
+  Serial.println("Last written block is: " + (String)i);
+  if(memory_used_marker == 0) // Memory has never been used, this is the first start of the system. WRITE MEMORY
+  {
+    Serial.println("Memory is empty");
+    //Serial.println("bytes to be written: " + (String)(sizeof(*Time_str)));
+    EEPROM_Board.write(0, (byte*)Time_str, sizeof(*Time_str));
+  }
+  else                        // Memory has been used, find where to start writing the values. READ MEMORY
+  {
+    Serial.println("Memory is NOT empty");
+    EEPROM_Board.read(last_written_block, (byte*)Time_str, sizeof(*Time_str)); // need to compare memorycell_write_counters
+    Serial.println("Readed cell: " + (String)Time_str-&#62;offset + "\t" + (String)Time_str-&#62;hours + " hours\t" + (String)Time_str-&#62;minutes + " minutes\t" + (String)Time_str-&#62;memorycell_write_counter + " writing cycles");
+  }
+  //Show_Memory(0, 2048);
+  //while(1)                        /****************************************** CAREFULLY!!!! WILL STUCK **********************************************/
+    //digitalWrite(13, HIGH);
+}
+
+/*
+ * Saving of the actual time to the memory
+ */
+void EEPROM_save(my_time_t* EEPROM_time, ts* RTC_time) // NOT DEBUGGED
+{
+  EEPROM_time-&#62;hours = RTC_time-&#62;hour; // Write current time to the structure for writing to mem.
+  EEPROM_time-&#62;minutes = RTC_time-&#62;min;
+  
+  EEPROM_time-&#62;offset = (EEPROM_time-&#62;offset + 1)%8;      // Increase current address of the memory block;
+  EEPROM_time-&#62;memorycell_write_counter++;                // Increase current counter of the rewrite operations;
+  
+  EEPROM_Board.write(EEPROM_time-&#62;offset*MEM_BLOCK_SIZE, (byte*)EEPROM_time, sizeof(*EEPROM_time));
+}
+
+					</code>
+					</pre>
+
+				<!-- Footer -->
+					<footer id="footer">
+						<div class="inner">
+							<section>
+								<h2>Kontakte</h2>
+								<ul class="icons">
+									<li><a href="https://www.linkedin.com/in/bohdan-ko/" class="icon brands style2 fa-linkedin"><span class="label">LinkedIn</span></a></li>
+									<!-- <li><a href="#" class="icon brands style2 fa-facebook-f"><span class="label">Facebook</span></a></li> -->
+									<li><a href="https://www.instagram.com/bohdan_ko1/" class="icon brands style2 fa-instagram"><span class="label">Instagram</span></a></li>
+									<li><a href="tel:+4915203957756" class="icon solid style2 fa-phone"><span class="label">Phone</span></a></li>
+									<li><a href="mailto:bohdankondratenko@gmail.com" class="icon solid style2 fa-envelope"><span class="label">Email</span></a></li>
+								</ul>
+							</section>
+							<ul class="copyright">
+								<li>&copy; Untitled. All rights reserved</li><li>Design: <a href="http://html5up.net">HTML5 UP</a></li>
+							</ul>
+						</div>
+					</footer>
+
+			</div>
+
+		<!-- Scripts -->
+			<script src="../../assets/js/jquery.min.js"></script>
+			<script src="../../assets/js/browser.min.js"></script>
+			<script src="../../assets/js/breakpoints.min.js"></script>
+			<script src="../../assets/js/util.js"></script>
+			<script src="../../assets/js/main.js"></script>
+			<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/prism.min.js"></script>
+
+	</body>
+</html>

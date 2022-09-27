@@ -1,0 +1,138 @@
+﻿<!DOCTYPE HTML>
+<!--
+	Template Phantom by HTML5 UP
+	Downloaded from html5up.net | @ajlkn
+	Changed by Bohdan Kondratenko for Job Application Purposes
+-->
+<html>
+	<head>
+		<title>Lampen.h</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+		<link rel="stylesheet" href="../../assets/css/main.css" />
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/themes/prism.min.css"/>
+		<noscript><link rel="stylesheet" href="../../assets/css/noscript.css" /></noscript>
+	</head>
+
+	<body class="is-preload">
+
+		<button onclick="history.back()" id="arrow_back_outline" title="Back">
+			<span id="arrow_back"></span>
+		</button>
+
+		<button onclick="topFunction()" id="arrow_top_outline" title="Scroll up">
+			<span id="arrow_top"></span>
+		</button>
+
+		<!-- Wrapper -->
+			<div id="wrapper">
+
+				<!-- Header -->
+					<header id="header">
+						<div class="inner">
+
+							<!-- Logo -->
+								<a href="../../index.html" class="logo">
+									<span class="symbol"><img src="../../images/logo.svg" alt="" /></span><span class="title">Bohdan Kondratenko</span>
+								</a>
+
+						</div>
+					</header>
+
+				<!-- Main -->
+				<h2>Lampen.h</h2>
+				<pre>
+					<code class="language-clike">
+#ifndef _LAMPEN_H_
+#define _LAMPEN_H_
+
+/******************* DEFINES *******************/
+
+/* States of one separated Traffic light.
+   Program switches cyclic between the states
+ */
+typedef enum
+{
+  ROT = 0x00,       // ROT
+  ROT_GRUN = 0x01,  // ROT + GELB
+  GRUN = 0x02,      // GRUN
+  GRUN_ROT = 0x03,  // GELB
+//  ALLE_AUS = 0x04,
+} Ampel_state_t;
+
+/******************* STRUCTURES, FUNKTION PROTOTYPES *******************/
+
+/*  Structure for connecting pins of MCU and Program Logic
+ *  describes one single traffic light (3 Lamps) on Potsdamer Platz
+ *  For declaration - assign a corresponding output pin Numbers to a field
+*/
+struct One_ampel_struct
+{
+  uint8_t rot;  // Pin Number
+  uint8_t gelb; // Pin Number
+  uint8_t grun; // Pin Number
+
+  Ampel_state_t current_state;
+  Ampel_state_t future_state;
+
+  uint16_t ticks; // for built in timer
+//  uint8_t grun_blinken; // for blink count during color change
+};
+
+typedef struct One_ampel_struct one_ampel_t;
+
+/*  Structure for connecting pins of MCU and Program Logic
+ *  describes the whole Traffic Light on Potsdamer Platz
+ *  For declaration - assign a corresponding output pin Numbers to a field
+*/
+struct Ampel_struct
+{
+  one_ampel_t ein_ampel[5]; 
+
+  uint8_t curr_phase;          // Number of a Phase of traffic light (which streets are red and which are green) 
+
+  uint16_t main_state_time;    // Times (mS) for States of traffic lights
+  uint16_t transit_state_time;
+ // uint16_t blink_state_time;
+};
+
+typedef struct Ampel_struct ampel_t;
+
+void init_ampel(ampel_t* Ampel);
+
+#endif /* _LAMPEN_H_ */
+
+					</code>
+					</pre>
+
+				<!-- Footer -->
+					<footer id="footer">
+						<div class="inner">
+							<section>
+								<h2>Kontakte</h2>
+								<ul class="icons">
+									<li><a href="https://www.linkedin.com/in/bohdan-ko/" class="icon brands style2 fa-linkedin"><span class="label">LinkedIn</span></a></li>
+									<!-- <li><a href="#" class="icon brands style2 fa-facebook-f"><span class="label">Facebook</span></a></li> -->
+									<li><a href="https://www.instagram.com/bohdan_ko1/" class="icon brands style2 fa-instagram"><span class="label">Instagram</span></a></li>
+									<li><a href="tel:+4915203957756" class="icon solid style2 fa-phone"><span class="label">Phone</span></a></li>
+									<li><a href="mailto:bohdankondratenko@gmail.com" class="icon solid style2 fa-envelope"><span class="label">Email</span></a></li>
+								</ul>
+							</section>
+							<ul class="copyright">
+								<li>&copy; Untitled. All rights reserved</li><li>Design: <a href="http://html5up.net">HTML5 UP</a></li>
+							</ul>
+						</div>
+					</footer>
+
+			</div>
+
+		<!-- Scripts -->
+			<script src="../../assets/js/jquery.min.js"></script>
+			<script src="../../assets/js/browser.min.js"></script>
+			<script src="../../assets/js/breakpoints.min.js"></script>
+			<script src="../../assets/js/util.js"></script>
+			<script src="../../assets/js/main.js"></script>
+			<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/prism.min.js"></script>
+
+	</body>
+</html>

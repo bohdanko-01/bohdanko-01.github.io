@@ -1,0 +1,113 @@
+﻿<!DOCTYPE HTML>
+<!--
+	Template Phantom by HTML5 UP
+	Downloaded from html5up.net | @ajlkn
+	Changed by Bohdan Kondratenko for Job Application Purposes
+-->
+<html>
+	<head>
+		<title>PIN.h</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+		<link rel="stylesheet" href="../../assets/css/main.css" />
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/themes/prism.min.css"/>
+		<noscript><link rel="stylesheet" href="../../assets/css/noscript.css" /></noscript>
+	</head>
+
+	<body class="is-preload">
+
+		<button onclick="history.back()" id="arrow_back_outline" title="Back">
+			<span id="arrow_back"></span>
+		</button>
+
+		<button onclick="topFunction()" id="arrow_top_outline" title="Scroll up">
+			<span id="arrow_top"></span>
+		</button>
+
+		<!-- Wrapper -->
+			<div id="wrapper">
+
+				<!-- Header -->
+					<header id="header">
+						<div class="inner">
+
+							<!-- Logo -->
+								<a href="../../index.html" class="logo">
+									<span class="symbol"><img src="../../images/logo.svg" alt="" /></span><span class="title">Bohdan Kondratenko</span>
+								</a>
+
+						</div>
+					</header>
+
+				<!-- Main -->
+				<h2>PIN.h</h2>
+					<pre>
+					<code class="language-clike">
+/*
+ * PIN_functions.h
+ *
+ *  Created on: 26 мая 2018 г.
+ *      Author: Bohdan
+ */
+
+#ifndef PIN_FUNCTIONS_H_
+#define PIN_FUNCTIONS_H_
+
+void curr_switch_lowhigh(curr_sens_t switch_numb, SW_state_t State);
+void cur_set_resolution(float* SKZ, SW_state_t* state);
+
+void chip_sel_temp_sens(temp_sens_t temp_sens_numb, Work_state_t State);
+void heat_elem_set_PW(heat_el_t heat_elem, uint16_t PW_rate, uint8_t ON_OFF_mask_item);
+void heat_el_resume_PWM(void);//heat_el_t* heat_elem);
+void detach_pin(GPIO_TypeDef* Port, uint16_t Pin,  GPIO_PinState State);
+void attach_pin(GPIO_TypeDef* Port, uint16_t Pin, uint8_t AF);
+void heat_el_set_measure(heat_el_t heat_elem, uint16_t PW_rate, uint8_t ON_OFF_mask_item);
+void heat_elem_set_PERIOD(uint16_t periodms);
+void switch_heat_elems(Settings_str* BUFF, heat_el_t* was_on_last, uint8_t size, uint8_t* ON_OFF_mask);
+void heat_elems_all_ON(uint16_t* values, uint8_t* ON_OFF_mask);
+uint8_t Get_Dig_In_States(void);
+void Gig_Out_On(uint8_t States_Byte);
+void Lock_PINs(void);
+void All_timers_start(void);
+
+uint8_t Get_CAN_addr(void);
+
+void proceed_ADC_data(int16_t** CS_ADC_1_sorted, int16_t** CS_ADC_3_sorted,
+		int16_t** ADC_1_proceeded, int16_t** ADC_3_proceeded);
+
+#endif /* PIN_FUNCTIONS_H_ */
+
+					</code>
+					</pre>
+
+				<!-- Footer -->
+					<footer id="footer">
+						<div class="inner">
+							<section>
+								<h2>Kontakte</h2>
+								<ul class="icons">
+									<li><a href="https://www.linkedin.com/in/bohdan-ko/" class="icon brands style2 fa-linkedin"><span class="label">LinkedIn</span></a></li>
+									<!-- <li><a href="#" class="icon brands style2 fa-facebook-f"><span class="label">Facebook</span></a></li> -->
+									<li><a href="https://www.instagram.com/bohdan_ko1/" class="icon brands style2 fa-instagram"><span class="label">Instagram</span></a></li>
+									<li><a href="tel:+4915203957756" class="icon solid style2 fa-phone"><span class="label">Phone</span></a></li>
+									<li><a href="mailto:bohdankondratenko@gmail.com" class="icon solid style2 fa-envelope"><span class="label">Email</span></a></li>
+								</ul>
+							</section>
+							<ul class="copyright">
+								<li>&copy; Untitled. All rights reserved</li><li>Design: <a href="http://html5up.net">HTML5 UP</a></li>
+							</ul>
+						</div>
+					</footer>
+
+			</div>
+
+		<!-- Scripts -->
+			<script src="../../assets/js/jquery.min.js"></script>
+			<script src="../../assets/js/browser.min.js"></script>
+			<script src="../../assets/js/breakpoints.min.js"></script>
+			<script src="../../assets/js/util.js"></script>
+			<script src="../../assets/js/main.js"></script>
+			<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/prism.min.js"></script>
+
+	</body>
+</html>

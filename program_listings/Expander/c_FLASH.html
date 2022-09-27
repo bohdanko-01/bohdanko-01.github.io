@@ -1,0 +1,367 @@
+﻿<!DOCTYPE HTML>
+<!--
+	Template Phantom by HTML5 UP
+	Downloaded from html5up.net | @ajlkn
+	Changed by Bohdan Kondratenko for Job Application Purposes
+-->
+<html>
+	<head>
+		<title>FLASH.c</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+		<link rel="stylesheet" href="../../assets/css/main.css" />
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/themes/prism.min.css"/>
+		<noscript><link rel="stylesheet" href="../../assets/css/noscript.css" /></noscript>
+	</head>
+
+	<body class="is-preload">
+
+		<button onclick="history.back()" id="arrow_back_outline" title="Back">
+			<span id="arrow_back"></span>
+		</button>
+
+		<button onclick="topFunction()" id="arrow_top_outline" title="Scroll up">
+			<span id="arrow_top"></span>
+		</button>
+
+		<!-- Wrapper -->
+			<div id="wrapper">
+
+				<!-- Header -->
+					<header id="header">
+						<div class="inner">
+
+							<!-- Logo -->
+								<a href="../../index.html" class="logo">
+									<span class="symbol"><img src="../../images/logo.svg" alt="" /></span><span class="title">Bohdan Kondratenko</span>
+								</a>
+
+						</div>
+					</header>
+
+				<!-- Main -->
+				<h2>FLASH.c</h2>
+					<pre>
+					<code class="language-clike">
+					/*
+ * FLASH_functions.c
+ *
+ *  Created on: 19 aug. 2018 .
+ *      Author: Bohdan
+ */
+
+#include "main.h"
+#include "stm32f4xx_hal.h"
+#include "My_types.h"
+#include "FLASH_functions.h"
+#include &#60;string.h&#62;
+#include "PIN_functions.h"
+#include "adc.h"
+#include "cmsis_os.h"
+
+/* Function for reading FLASH memory sector with all of the settings
+ * Parameters:
+ * 		BUFF - pointer to structure where readed settings will be saved
+ * 		size - size of BUFF in bytes (sizeof(BUFF))
+ */
+void Read_FLASH(Settings_str* BUFF, uint16_t size)
+{
+	uint8_t* ptr = (uint8_t*)BUFF;
+	for(uint16_t i = 0; i &#60; size; i++)
+		ptr[i] = *(__IO uint8_t *)(PARAMS_START_MEM_ADR + i);
+}
+
+/* Function for initiating the structure BUFF. Change will be performed ONLY if nothing
+ * was written to appropriate cell in flash before
+ * Parameters:
+ * 		BUFF - pointer to structure for analysing and initiation
+ * 		Addr - addres of device, to create the default name (sets manually
+ * 			on the board by toggling the switches)
+ */
+void Init_RAM(Settings_str* BUFF, uint8_t Addr)
+{
+	uint16_t letter_count = 0;
+	char Default_name[7];
+	uint8_t rewrite_mask = 0;
+
+	// Timings and etc.
+	if(BUFF-&#62;CS_per == 0xFFFF)
+		BUFF-&#62;CS_per = CURSENS_PERIOD_VAL;
+	if(BUFF-&#62;TS_per == 0xFFFF)
+		BUFF-&#62;TS_per = TEMPSENS_PERIOD_VAL;
+	if(BUFF-&#62;PWM_per == 0xFFFF)
+		BUFF-&#62;PWM_per = PWM_PERIOD_VAL;
+	if(BUFF-&#62;Lin_In_per == 0xFFFF)
+		BUFF-&#62;Lin_In_per = LININ_PERIOD_VAL;
+	if(BUFF-&#62;Hard_ver == 0xFFFFFFFF)
+		BUFF-&#62;Hard_ver = 0;
+	if(BUFF-&#62;Soft_ver == 0xFFFFFFFF)
+		BUFF-&#62;Soft_ver = 0;
+	if(BUFF-&#62;Transm_allowed == 0xFF)
+		BUFF-&#62;Transm_allowed = 1;
+	if(BUFF-&#62;Max_temp == 0xFFFF)
+		BUFF-&#62;Max_temp = MAX_TEMP;
+	if(BUFF-&#62;Min_temp == 0xFFFF)
+		BUFF-&#62;Min_temp = MIN_TEMP;
+
+	// Termocouple types
+	for(uint16_t i = 0; i &#60; 24; i++) //sizeof(BUFF-&#62;Termoc_types)/sizeof(TC_type_t); i++)
+	{
+		if(BUFF-&#62;Termoc_types[i] == 0xFF)
+			BUFF-&#62;Termoc_types[i] = K;
+	}
+	//BUFF-&#62;Termoc_types[PWM9] = J; //  !!!!!!!! our case
+
+	for(uint16_t i = 0; i &#60; sizeof(BUFF-&#62;Name_str)/sizeof(uint8_t); i++) //Analyse the location in memory
+	{
+		if(BUFF-&#62;Name_str[i] == 0xFF)
+			letter_count ++;
+	}
+
+	if (letter_count &#62;= 255)  // If nothing was written before
+	{
+		sprintf(Default_name, "Dev%d", Addr);
+		strcpy((char*)BUFF-&#62;Name_str, Default_name); // Default name is DevADDR (exmpl: Dev53)
+	}
+
+	for(uint8_t i = 0; i&#60;9; i++)
+	{
+		for(uint8_t j = 0; j&#60;24; j++)
+		{
+			if(BUFF-&#62;Mask_matr[i][j] == 0xFF)
+				rewrite_mask = 1;
+			break;
+		}
+	}
+
+	if(rewrite_mask == 1)
+	{
+		for(uint8_t i = 0; i&#60;9; i++)
+		{
+			for(uint8_t j = 0; j&#60;24; j++)
+			{
+					BUFF-&#62;Mask_matr[i][j] = 0;
+			}
+		}
+		BUFF-&#62;Mask_matr[SW1][PWM7] = 1;
+		BUFF-&#62;Mask_matr[SW1][PWM8] = 1;
+
+		BUFF-&#62;Mask_matr[SW2][PWM4] = 1;
+		BUFF-&#62;Mask_matr[SW2][PWM5] = 1;
+		BUFF-&#62;Mask_matr[SW2][PWM6] = 1;
+
+		BUFF-&#62;Mask_matr[SW3][PWM1] = 1;
+		BUFF-&#62;Mask_matr[SW3][PWM2] = 1;
+		BUFF-&#62;Mask_matr[SW3][PWM3] = 1;
+
+		BUFF-&#62;Mask_matr[SW4][PWM9] = 1;
+		BUFF-&#62;Mask_matr[SW4][PWM10] = 1;
+		BUFF-&#62;Mask_matr[SW4][PWM11] = 1;
+
+		BUFF-&#62;Mask_matr[SW5][PWM12] = 1;
+		BUFF-&#62;Mask_matr[SW5][PWM13] = 1;
+		BUFF-&#62;Mask_matr[SW5][PWM14] = 1;
+
+		BUFF-&#62;Mask_matr[SW6][PWM15] = 1;
+		BUFF-&#62;Mask_matr[SW6][PWM16] = 1;
+
+		BUFF-&#62;Mask_matr[SW8][PWM23] = 1;
+		BUFF-&#62;Mask_matr[SW8][PWM24] = 1;
+
+		BUFF-&#62;Mask_matr[SW7][PWM20] = 1;
+		BUFF-&#62;Mask_matr[SW7][PWM21] = 1;
+		BUFF-&#62;Mask_matr[SW7][PWM22] = 1;
+
+		BUFF-&#62;Mask_matr[SW9][PWM17] = 1;
+		BUFF-&#62;Mask_matr[SW9][PWM18] = 1;
+		BUFF-&#62;Mask_matr[SW9][PWM19] = 1;
+	}
+}
+
+/* Function for writing the memory on the fresh MCU (when nothing is written already)
+ * Parameters:
+ * 		start_addres1 - start address in FLASH memory
+ * 		BUFF - structure with settings
+ * 		size - size of passed structure (sizeof(BUFF))
+ */
+void Write_FLASH(uint32_t start_addres1, Settings_str* BUFF, uint16_t size)
+{
+	HAL_StatusTypeDef flash_ok = HAL_ERROR;
+	uint8_t* ptr = (uint8_t*)BUFF;
+
+	// Відкрити пам'ять для запису
+	while (flash_ok != HAL_OK)
+	{
+		flash_ok = HAL_FLASH_Unlock();
+	}
+
+	// Стирання сектора, в якому лежить адреса (поки реалізовано тільки для двох секторів - 12 і 13)
+	if (start_addres1 &#62;= 0x08060000 && start_addres1 &#60; 0x0807FFFF)
+		FLASH_Erase_Sector(FLASH_SECTOR_7, VOLTAGE_RANGE_3);
+
+	//Запис до пам'яті значення info1 та іnfo2
+	flash_ok = HAL_ERROR;
+	for (uint16_t i = 0; i &#60; size; i++)
+	{
+		flash_ok = HAL_FLASH_Program(TYPEPROGRAM_BYTE, start_addres1, (uint64_t)(*ptr));
+		start_addres1 += 1;
+		ptr++;
+	}
+
+	//Закриття пам'яті
+	 flash_ok = HAL_ERROR;
+	 while(flash_ok != HAL_OK)
+	 {
+		 flash_ok = HAL_FLASH_Lock();
+	 }
+}
+
+/* Function for reinitializing matrix for polling current sensors
+ * Parameters:
+ * 		&BUFF - buffer with settings for FLASH
+ */
+void Mask_matr_REINIT(Settings_str* BUFF)
+{
+	uint16_t ADC_1_data[CUR_RAW_ARR_LENGTH*NUMB_CHAN_PER_ADC1];
+	uint16_t ADC_3_data[CUR_RAW_ARR_LENGTH*NUMB_CHAN_PER_ADC3];
+	uint8_t ADC1_chan;
+	uint8_t ADC3_chan;
+
+	if (HAL_GPIO_ReadPin(BOARDET_1_GPIO_Port, BOARDET_1_Pin) == 1) // If connector 1 is not connected
+	{
+		for (uint8_t i = 0; i &#60; 3; i++) // All of the PWM from SW1 to SW3 = 0
+		{
+			for (uint8_t j = 0; j &#60; 24; i++)
+				BUFF-&#62;Mask_matr[i][j] = 0;
+		}
+	}
+
+	if (HAL_GPIO_ReadPin(BOARDET_2_GPIO_Port, BOARDET_2_Pin) == 1) // If connector 2 is not connected
+	{
+		for (uint8_t i = 3; i &#60; 6; i++) // All of the PWM from SW4 to SW6 = 0
+		{
+			for (uint8_t j = 0; j &#60; 24; i++)
+				BUFF-&#62;Mask_matr[i][j] = 0;
+		}
+	}
+
+	if (HAL_GPIO_ReadPin(BOARDET_3_GPIO_Port, BOARDET_3_Pin) == 1) // If connector 3 is not connected
+	{
+		for (uint8_t i = 6; i &#60; 9; i++) // All of the PWM from SW7 to SW9 = 0
+		{
+			for (uint8_t j = 0; j &#60; 24; i++)
+				BUFF-&#62;Mask_matr[i][j] = 0;
+		}
+	}
+	/******************/
+	for(heat_el_t PW = PWM1; PW &#60;= PWM24; PW++)
+	{
+		heat_elem_set_PW(PW, MAX_PWM, 1);
+		for(uint8_t i = 0; i &#60; 24; i++)
+		{
+			heat_elem_set_PW((PW+i)%24, MIN_PWM, 1);
+		}
+
+		for (uint8_t j = 0; j &#60; CUR_RAW_ARR_LENGTH; j++)  // 31 times scan
+		{
+			HAL_ADC_Start_DMA(&hadc1, (uint32_t*)ADC_1_data, sizeof(ADC_1_data)/sizeof(uint16_t));
+			HAL_ADC_Start_DMA(&hadc3, (uint32_t*)ADC_3_data, sizeof(ADC_3_data)/sizeof(uint16_t));
+			vTaskDelay(1);
+		}
+
+		uint16_t MAX_Bubble;
+		uint8_t MAX_index = 0;  // index of the maximum element readed from the ADC
+		/************ Cycle for searching max of element in ADC1 *************/
+		MAX_Bubble = ADC_1_data[0];
+		for (uint8_t i = 1; i &#60; sizeof(ADC_1_data)/sizeof(uint16_t); i++)
+		{
+			if(ADC_1_data[i] &#62; MAX_Bubble)
+				{
+					MAX_Bubble = ADC_1_data[i];
+					MAX_index = i;
+				}
+		}
+		ADC1_chan = MAX_index%6;
+
+		/************ Cycle for searching max of element in ADC3 *************/
+		MAX_Bubble = ADC_3_data[0];
+		for (uint8_t i = 1; i &#60; sizeof(ADC_3_data) / sizeof(uint16_t); i++)
+		{
+			if (ADC_3_data[i] &#62; MAX_Bubble)
+			{
+				MAX_Bubble = ADC_3_data[i];
+				MAX_index = i;
+			}
+		}
+		ADC3_chan = MAX_index % 6;
+
+		if(ADC1_chan &#62; ADC3_chan)
+		{
+			switch(ADC1_chan)
+			{
+			case 0: BUFF-&#62;Mask_matr[SW2][PW] = 1;break;
+			case 1: BUFF-&#62;Mask_matr[SW3][PW] = 1;break;
+			case 2: BUFF-&#62;Mask_matr[SW4][PW] = 1;break;
+			case 3: BUFF-&#62;Mask_matr[SW5][PW] = 1;break;
+			case 4: BUFF-&#62;Mask_matr[SW7][PW] = 1;break;
+			case 5: BUFF-&#62;Mask_matr[SW8][PW] = 1;break;
+			}
+		}
+		else
+		{
+			switch(ADC3_chan)
+			{
+			case 0: BUFF-&#62;Mask_matr[SW1][PW] = 1;break;
+			case 1: BUFF-&#62;Mask_matr[SW6][PW] = 1;break;
+			case 2: BUFF-&#62;Mask_matr[SW9][PW] = 1;break;
+			}
+		}
+	}
+}
+
+/****************************************************/
+/* 	ADC1	ADC3
+ ******************
+ * 	СUR2	CUR1
+ *	CUR3	CUR6
+ *	CUR4	CUR9
+ *	CUR5
+ *	CUR7
+ *	CUR8
+ */
+/****************************************************/
+
+					</code>
+					</pre>
+
+				<!-- Footer -->
+					<footer id="footer">
+						<div class="inner">
+							<section>
+								<h2>Kontakte</h2>
+								<ul class="icons">
+									<li><a href="https://www.linkedin.com/in/bohdan-ko/" class="icon brands style2 fa-linkedin"><span class="label">LinkedIn</span></a></li>
+									<!-- <li><a href="#" class="icon brands style2 fa-facebook-f"><span class="label">Facebook</span></a></li> -->
+									<li><a href="https://www.instagram.com/bohdan_ko1/" class="icon brands style2 fa-instagram"><span class="label">Instagram</span></a></li>
+									<li><a href="tel:+4915203957756" class="icon solid style2 fa-phone"><span class="label">Phone</span></a></li>
+									<li><a href="mailto:bohdankondratenko@gmail.com" class="icon solid style2 fa-envelope"><span class="label">Email</span></a></li>
+								</ul>
+							</section>
+							<ul class="copyright">
+								<li>&copy; Untitled. All rights reserved</li><li>Design: <a href="http://html5up.net">HTML5 UP</a></li>
+							</ul>
+						</div>
+					</footer>
+
+			</div>
+
+		<!-- Scripts -->
+			<script src="../../assets/js/jquery.min.js"></script>
+			<script src="../../assets/js/browser.min.js"></script>
+			<script src="../../assets/js/breakpoints.min.js"></script>
+			<script src="../../assets/js/util.js"></script>
+			<script src="../../assets/js/main.js"></script>
+			<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/prism.min.js"></script>
+
+	</body>
+</html>

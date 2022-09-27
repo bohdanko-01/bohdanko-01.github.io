@@ -1,0 +1,140 @@
+﻿<!DOCTYPE HTML>
+<!--
+	Template Phantom by HTML5 UP
+	Downloaded from html5up.net | @ajlkn
+	Changed by Bohdan Kondratenko for Job Application Purposes
+-->
+<html>
+	<head>
+		<title>MATH.c</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+		<link rel="stylesheet" href="../../assets/css/main.css" />
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/themes/prism.min.css"/>
+		<noscript><link rel="stylesheet" href="../../assets/css/noscript.css" /></noscript>
+	</head>
+
+	<body class="is-preload">
+
+		<button onclick="history.back()" id="arrow_back_outline" title="Back">
+			<span id="arrow_back"></span>
+		</button>
+
+		<button onclick="topFunction()" id="arrow_top_outline" title="Scroll up">
+			<span id="arrow_top"></span>
+		</button>
+
+		<!-- Wrapper -->
+			<div id="wrapper">
+
+				<!-- Header -->
+					<header id="header">
+						<div class="inner">
+
+							<!-- Logo -->
+								<a href="../../index.html" class="logo">
+									<span class="symbol"><img src="../../images/logo.svg" alt="" /></span><span class="title">Bohdan Kondratenko</span>
+								</a>
+
+						</div>
+					</header>
+
+				<!-- Main -->
+				<h2>MATH.c</h2>
+					<pre>
+					<code class="language-clike">
+					/*
+ * MATH_functions.c
+ *
+ *  Created on: 26 לא 2018 ד.
+ *      Author: Bohdan
+ */
+
+#include "MATH_functions.h"
+#include "stm32f4xx_hal.h"
+#include "math.h"
+#include "My_types.h"
+
+/* Calculating of current RMS.
+ * Parameters:
+ * 		arr - pointer to array for calculating RMS
+ * 		l - length of arr
+ */
+float calc_SKZ (int16_t* arr, int l, uint16_t Vref, SW_state_t state)
+{
+	uint16_t SKZ_ADC;
+	uint32_t summ = 0;
+
+	for(uint8_t i = 0; i &#60; l; i++)
+	{
+		summ = summ + (int32_t)arr[i]*arr[i];
+	}
+
+	SKZ_ADC = (my_sqrt(summ/l));
+	// Ka = 0/1 ֲ/ְ
+	// I = N(אצן)*Uref/(2^12-1)/Ka
+	// I = Nadc*12.1/Nvref   ("N" - מעסקוע ְײֿ)
+	if(state == HIGH)
+		return (float)((float)SKZ_ADC*12.1*2/(float)Vref);
+	else
+		return (float)((float)SKZ_ADC*12.1*0.5/(float)Vref);
+}
+
+uint32_t my_sqrt(uint32_t Val)
+{
+	int32_t ROOT = Val/2; // according to this algorithm, first value = half of argument under root
+	for (int8_t i = 0; i&#60;20; i++) // 14
+	{
+	    ROOT = (ROOT + Val/ROOT)/2;
+	}
+	return ROOT;
+}
+
+uint8_t calc_Spec(uint8_t size)
+{
+	uint8_t spec = 0;
+	switch(size)
+	{
+	case 1: spec = 0x4F; break;
+	case 2: spec = 0x4B; break;
+	case 3: spec = 0x47; break;
+	case 4: spec = 0x43; break;
+	}
+
+	return spec;
+}
+
+					</code>
+					</pre>
+
+				<!-- Footer -->
+					<footer id="footer">
+						<div class="inner">
+							<section>
+								<h2>Kontakte</h2>
+								<ul class="icons">
+									<li><a href="https://www.linkedin.com/in/bohdan-ko/" class="icon brands style2 fa-linkedin"><span class="label">LinkedIn</span></a></li>
+									<!-- <li><a href="#" class="icon brands style2 fa-facebook-f"><span class="label">Facebook</span></a></li> -->
+									<li><a href="https://www.instagram.com/bohdan_ko1/" class="icon brands style2 fa-instagram"><span class="label">Instagram</span></a></li>
+									<li><a href="tel:+4915203957756" class="icon solid style2 fa-phone"><span class="label">Phone</span></a></li>
+									<li><a href="mailto:bohdankondratenko@gmail.com" class="icon solid style2 fa-envelope"><span class="label">Email</span></a></li>
+								</ul>
+							</section>
+							<ul class="copyright">
+								<li>&copy; Untitled. All rights reserved</li><li>Design: <a href="http://html5up.net">HTML5 UP</a></li>
+							</ul>
+						</div>
+					</footer>
+
+			</div>
+
+		<!-- Scripts -->
+			<script src="../../assets/js/jquery.min.js"></script>
+			<script src="../../assets/js/browser.min.js"></script>
+			<script src="../../assets/js/breakpoints.min.js"></script>
+			<script src="../../assets/js/util.js"></script>
+			<script src="../../assets/js/main.js"></script>
+			<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/prism.min.js"></script>
+
+	</body>
+</html>

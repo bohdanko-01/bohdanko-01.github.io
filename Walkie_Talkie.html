@@ -1,0 +1,119 @@
+<!DOCTYPE HTML>
+<!--
+	Template Phantom by HTML5 UP
+	Downloaded from html5up.net | @ajlkn
+	Changed by Bohdan Kondratenko for Job Application Purposes
+-->
+<html>
+	<head>
+		<title>Fahrrad-Walkie-Talkie</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+		<link rel="stylesheet" href="assets/css/main.css" />
+		<noscript><link rel="stylesheet" href="assets/css/noscript.css" /></noscript>
+	</head>
+
+	<body class="is-preload">
+
+		<button onclick="parent.location='index.html'" id="arrow_back_outline" title="Startpage">
+			<span id="arrow_back"></span>
+		</button>
+
+		<button onclick="topFunction()" id="arrow_top_outline" title="Scroll up">
+			<span id="arrow_top"></span>
+		</button>
+		
+		<!-- Wrapper -->
+			<div id="wrapper">
+
+				<!-- Header -->
+					<header id="header">
+						<div class="inner">
+
+							<!-- Logo -->
+								<a href="index.html" class="logo">
+									<span class="symbol"><img src="images/logo.svg" alt="" /></span><span class="title">Bohdan Kondratenko</span>
+								</a>
+
+						</div>
+					</header>
+
+				<!-- Main -->
+					<div id="main">
+						<div class="inner">
+							<h1>Fahrrad-Walkie-Talkie</h1>
+							<span class="image main"><img src="images/Walkie_Talkie_Prinzip.jpg" alt="" /></span>
+							<p>Die Idee von diesem work-in-progress Hobby-Projekt ist ein Kommunikationsgerät fürs Fahrradfahren. Die Idee des Konstruktionsprinzips ist das Konstruktionsprinzip des Bodyguard-Kits für Sicherheitsdienste, mit einem Kopfhörer und Halsmikrofon. Für die erste Version ist eine Knopfaktivierung vorgesehen, aber später wird eine Sprach-Aktivierung hinzugefügt. </p>
+							<span class="image narrow"><img src="images/Walkie_Talkie_Struktur.jpg" alt="" /></span>
+							<p>Die Hardware-Teil des Projekts wird für komplett manuele Anfertigung vorgesehen. Ausgewällter Mikrokontroller: Atmega328p. Als drahklose Kommuntikationsmodul dient ein nRF24L01-PA-LNA.</p>
+							<p>Eine struckturelle Schema des zukunftigen Geräts:</p>
+							<!-- <span class="image main"><img src="images/Expander_1.jpg" alt="" /></span> --> 
+							<p>In dem Portfolio ist das work-in-progress Projekt für Demonstration des Programmteils für fertigen und geprüften Module dargestellt.</p>
+							<p>Für das Programm wurden die follgenden Programmodule in Form von Biblioteken für privaten Benutzung geschrieben:</p>
+							<ol> 
+								<li>GPIO Bibliotek</li>
+								<li>Timers (mit flexiblen Einstellmöglichkeiten, so wie ADC-Triggerung und PWM-Erzeugung)</li>
+								<li>UART Interface</li>
+								<li>Unterstutzung des inkrementalen Encoders</li>
+								<li>ADC</li>
+								<li>Ring Buffer</li>
+							</ol> 
+							<p>Zu Demonstrationszwecken sind die follgenden Dateien komplett oder teilweise dargestellt:</p>
+							<p>(Wählen Sie ein File aus, um dessen Inhalte sich anzuschauen)</p>
+							<ul>
+								<h3>*.c Dateien</h3>
+								<li><a href="program_listings\Walkie_Talkie\c_main.html"><code>main.c</code></a></li>
+								<li><a href="program_listings\Walkie_Talkie\c_PIN_avr.html"><code>PIN_avr.c</code></a></li>
+								<li><a href="program_listings\Walkie_Talkie\c_Encoder.html"><code>Encoder.c</code></a></li>
+								<li><a href="program_listings\Walkie_Talkie\c_Ring_buffer.html"><code>Ring_buffer.c</code></a></li>
+								<li><a href="program_listings\Walkie_Talkie\c_Tim_ATmega328p.html"><code>Tim_ATmega328p.c</code></a></li>
+								<li><a href="program_listings\Walkie_Talkie\c_UART_avr.html"><code>UART_avr.c</code></a></li>
+								<li><a href="program_listings\Walkie_Talkie\c_ADC.html"><code>ADC.c</code></a></li>
+								<li><a href="program_listings\Walkie_Talkie\c_SPI_nRF.html"><code>SPI_nRF.c (Work in progress)</code></a></li>
+							</ul>
+							<ul>
+								<h3>*.h Dateien</h3>
+								<li><a href="program_listings\Walkie_Talkie\h_main.html"><code>main.h</code></a></li>
+								<li><a href="program_listings\Walkie_Talkie\h_PIN_avr.html"><code>PIN_avr.h</code></a></li>
+								<li><a href="program_listings\Walkie_Talkie\h_Encoder.html"><code>Encoder.h</code></a></li>
+								<li><a href="program_listings\Walkie_Talkie\h_Ring_buffer.html"><code>Ring_buffer.h</code></a></li>
+								<li><a href="program_listings\Walkie_Talkie\h_Tim_ATmega328p.html"><code>Tim_ATmega328p.h</code></a></li>
+								<li><a href="program_listings\Walkie_Talkie\h_UART_avr.html"><code>UART_avr.h</code></a></li>
+								<li><a href="program_listings\Walkie_Talkie\h_ADC.html"><code>ADC.h</code></a></li>
+								<li><a href="program_listings\Walkie_Talkie\h_SPI_nRF.html"><code>SPI_nRF.h (Work in progress)</code></a></li>
+								<li><a href="program_listings\Walkie_Talkie\h_SPI_nRF_Registers.html"><code>SPI_nRF_Registers.h (Work in progress)</code></a></li>
+							</ul>
+							
+						</div>
+					</div>
+
+				<!-- Footer -->
+					<footer id="footer">
+						<div class="inner">
+							<section>
+								<h2>Kontakte</h2>
+								<ul class="icons">
+									<li><a href="https://www.linkedin.com/in/bohdan-ko/" class="icon brands style2 fa-linkedin"><span class="label">LinkedIn</span></a></li>
+									<!-- <li><a href="#" class="icon brands style2 fa-facebook-f"><span class="label">Facebook</span></a></li> -->
+									<li><a href="https://www.instagram.com/bohdan_ko1/" class="icon brands style2 fa-instagram"><span class="label">Instagram</span></a></li>
+									<li><a href="tel:+4915203957756" class="icon solid style2 fa-phone"><span class="label">Phone</span></a></li>
+									<li><a href="mailto:bohdankondratenko@gmail.com" class="icon solid style2 fa-envelope"><span class="label">Email</span></a></li>
+								</ul>
+							</section>
+							<ul class="copyright">
+								<li>&copy; Untitled. All rights reserved</li><li>Design: <a href="http://html5up.net">HTML5 UP</a></li>
+							</ul>
+						</div>
+					</footer>
+
+			</div>
+
+		<!-- Scripts -->
+			<script src="assets/js/jquery.min.js"></script>
+			<script src="assets/js/browser.min.js"></script>
+			<script src="assets/js/breakpoints.min.js"></script>
+			<script src="assets/js/util.js"></script>
+			<script src="assets/js/main.js"></script>
+
+	</body>
+</html>

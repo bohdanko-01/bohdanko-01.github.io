@@ -1,0 +1,149 @@
+﻿<!DOCTYPE HTML>
+<!--
+	Template Phantom by HTML5 UP
+	Downloaded from html5up.net | @ajlkn
+	Changed by Bohdan Kondratenko for Job Application Purposes
+-->
+<html>
+	<head>
+		<title>UART.c</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+		<link rel="stylesheet" href="../../assets/css/main.css" />
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/themes/prism.min.css"/>
+		<noscript><link rel="stylesheet" href="../../assets/css/noscript.css" /></noscript>
+	</head>
+
+	<body class="is-preload">
+
+		<button onclick="history.back()" id="arrow_back_outline" title="Back">
+			<span id="arrow_back"></span>
+		</button>
+
+		<button onclick="topFunction()" id="arrow_top_outline" title="Scroll up">
+			<span id="arrow_top"></span>
+		</button>
+
+		<!-- Wrapper -->
+			<div id="wrapper">
+
+				<!-- Header -->
+					<header id="header">
+						<div class="inner">
+
+							<!-- Logo -->
+								<a href="../../index.html" class="logo">
+									<span class="symbol"><img src="../../images/logo.svg" alt="" /></span><span class="title">Bohdan Kondratenko</span>
+								</a>
+
+						</div>
+					</header>
+
+				<!-- Main -->
+				<h2>UART.c</h2>
+				<pre>
+					<code class="language-clike">
+/*
+ * Created: 30.01.2022
+ *  Author: Bohdan
+ */ 
+
+#include "avr/io.h"
+#include &#60;stdio.h&#62;
+#include &#60;string.h&#62;
+#include &#60;stdlib.h&#62;
+
+#include "UART_avr.h"
+
+/* UART Initialization. 
+ * So far made only for UART0
+ */
+void UART0_start(unsigned long baud) 
+{
+	uint16_t ubrr = ((F_CPU/16/baud)-1);
+	
+	//Set baud rate
+	UBRR0 = ubrr; //(unsigned char)(ubrr&#62;&#62;8);
+	//UBRR0L = (unsigned char)ubrr;
+	// Enable receiver and transmitter
+	UCSR0B = 0;
+	UCSR0B |=  (1&#60;&#60;RXCIE0) | (1&#60;&#60;RXEN0) | (1&#60;&#60;TXEN0);   // RXCIE0 - Interrupts after receive are allowed
+	
+	//UCSR0C &= ~((1&#60;&#60;UMSEL00)|(1&#60;&#60;UMSEL01));			// Asynchronous UART - 00
+	//UCSR0C &= ~(1&#60;&#60;UCSZ02);
+	UCSR0C = 0;
+	UCSR0C |= (1&#60;&#60;UCSZ01)|(1&#60;&#60;UCSZ00);				// Bits UCSZ0х = 0b011 - Symbol size - 8 bit
+	UDR0 = 0;										// Flushing the Data-Register
+	//UCSR0C |= (1&#60;&#60;USBS0);							// 2 Stop Bits; 0 - of this bit gives 1 Stop Bit
+}
+
+
+/*****************************************************************************************************************/
+void UART_TR( char data ) // Sending a byte per UART
+{   // Wait for empty transmit buffer
+	while ( !( UCSR0A & (1&#60;&#60;UDRE0)) ); 
+	// Put data into buffer, sends the data
+	UDR0 = data;       
+}
+
+/*void UART_Transmit_int( unsigned long data )
+{   
+	char number[12];
+	ultoa(data, &number, 10);
+	UART_Transmit_str(&number); 
+}*/
+
+
+uint8_t UART_REC(void)
+{   /* Wait for data to be received */
+	while ( !(UCSR0A & (1&#60;&#60;RXC0)) );
+	/* Get and return received data from buffer */
+	return UDR0;
+}
+
+void print_str(char *str)
+{
+	uint16_t i = 0;
+	
+	while(str[i] != '\0')
+	{
+		UART_TR(str[i]);	//printing symbol
+		i++;
+	}
+	UDR0 = 0;
+}
+
+					</code>
+					</pre>
+
+				<!-- Footer -->
+					<footer id="footer">
+						<div class="inner">
+							<section>
+								<h2>Kontakte</h2>
+								<ul class="icons">
+									<li><a href="https://www.linkedin.com/in/bohdan-ko/" class="icon brands style2 fa-linkedin"><span class="label">LinkedIn</span></a></li>
+									<!-- <li><a href="#" class="icon brands style2 fa-facebook-f"><span class="label">Facebook</span></a></li> -->
+									<li><a href="https://www.instagram.com/bohdan_ko1/" class="icon brands style2 fa-instagram"><span class="label">Instagram</span></a></li>
+									<li><a href="tel:+4915203957756" class="icon solid style2 fa-phone"><span class="label">Phone</span></a></li>
+									<li><a href="mailto:bohdankondratenko@gmail.com" class="icon solid style2 fa-envelope"><span class="label">Email</span></a></li>
+								</ul>
+							</section>
+							<ul class="copyright">
+								<li>&copy; Untitled. All rights reserved</li><li>Design: <a href="http://html5up.net">HTML5 UP</a></li>
+							</ul>
+						</div>
+					</footer>
+
+			</div>
+
+		<!-- Scripts -->
+			<script src="../../assets/js/jquery.min.js"></script>
+			<script src="../../assets/js/browser.min.js"></script>
+			<script src="../../assets/js/breakpoints.min.js"></script>
+			<script src="../../assets/js/util.js"></script>
+			<script src="../../assets/js/main.js"></script>
+			<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/prism.min.js"></script>
+
+	</body>
+</html>

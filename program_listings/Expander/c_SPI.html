@@ -1,0 +1,214 @@
+﻿<!DOCTYPE HTML>
+<!--
+	Template Phantom by HTML5 UP
+	Downloaded from html5up.net | @ajlkn
+	Changed by Bohdan Kondratenko for Job Application Purposes
+-->
+<html>
+	<head>
+		<title>SPI.c</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+		<link rel="stylesheet" href="../../assets/css/main.css" />
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/themes/prism.min.css"/>
+		<noscript><link rel="stylesheet" href="../../assets/css/noscript.css" /></noscript>
+	</head>
+
+	<body class="is-preload">
+
+		<button onclick="history.back()" id="arrow_back_outline" title="Back">
+			<span id="arrow_back"></span>
+		</button>
+
+		<button onclick="topFunction()" id="arrow_top_outline" title="Scroll up">
+			<span id="arrow_top"></span>
+		</button>
+
+		<!-- Wrapper -->
+			<div id="wrapper">
+
+				<!-- Header -->
+					<header id="header">
+						<div class="inner">
+
+							<!-- Logo -->
+								<a href="../../index.html" class="logo">
+									<span class="symbol"><img src="../../images/logo.svg" alt="" /></span><span class="title">Bohdan Kondratenko</span>
+								</a>
+
+						</div>
+					</header>
+
+				<!-- Main -->
+				<h2>SPI.c</h2>
+					<pre>
+					<code class="language-clike">
+/*
+ * SPI_functions.c
+ *
+ *  Created on: 26 mai 2018.
+ *      Author: Bohdan
+ */
+
+#include "My_types.h"
+#include "SPI_functions.h"
+#include "PIN_functions.h"
+#include "stm32f4xx_hal.h"
+#include "spi.h"
+
+/* The function of reading the temperature data from the sensor on the SPI
+ * Parameters:
+ *		sensor_pair - pair of current sensors who are polling
+ *		Temp_arr - array for storing the temperature
+ */
+void get_temp_value (uint32_t* Temp_arr)//temp_sens_t* sensor_pair, uint32_t* Temp_arr)
+{
+	// Адреси регістрів з даними про температуру (LSB-&#62;MSB)
+	uint8_t byte_addr = 0x0C;
+	uint8_t byte_rec_1[3] = {0};
+	uint8_t byte_rec_2[3] = {0};
+
+	for(temp_sens_t i = TEMP_SENS_1; i &#60;= TEMP_SENS_12; i++)
+	{
+		chip_sel_temp_sens(i, ON);
+
+		HAL_SPI_Transmit(&hspi1, &byte_addr, 1, 0xFFFF);
+		HAL_SPI_Transmit(&hspi3, &byte_addr, 1, 0xFFFF);
+
+		HAL_SPI_Receive(&hspi1, &byte_rec_1[2], 1, 0xFFFF);
+		HAL_SPI_Receive(&hspi3, &byte_rec_2[2], 1, 0xFFFF);
+
+		HAL_SPI_Receive(&hspi1, &byte_rec_1[1], 1, 0xFFFF);
+		HAL_SPI_Receive(&hspi3, &byte_rec_2[1], 1, 0xFFFF);
+
+		HAL_SPI_Receive(&hspi1, &byte_rec_1[0], 1, 0xFFFF);
+		HAL_SPI_Receive(&hspi3, &byte_rec_2[0], 1, 0xFFFF);
+
+		chip_sel_temp_sens(i, OFF);
+
+		// Формирование массивов со значениями температуры
+		Temp_arr[i] = (int32_t)byte_rec_1[2] &#60;&#60; 16;
+		Temp_arr[i] |= (uint32_t)byte_rec_1[1] &#60;&#60; 8;
+		Temp_arr[i] |= (uint32_t)byte_rec_1[0];
+
+		Temp_arr[i+12] = (int32_t)byte_rec_2[2] &#60;&#60; 16;
+		Temp_arr[i+12] |= (uint32_t)byte_rec_2[1] &#60;&#60; 8;
+		Temp_arr[i+12] |= (uint32_t)byte_rec_2[0];
+	}
+}
+
+/* Function for adjustment the temperature sensors
+ * Parameters:
+ * 		CR0_content - content for register CR0 of temperature sensor
+ * 		CR1_content - content for register CR1 of temperature sensor
+ * 		TS_enum - pointer to array with enumeration of temperature sensors
+ * 		Type - type of thermocouple
+ */
+void Set_sensors(uint8_t CR0_content, uint8_t CR1_content, TC_type_t* Type) // temp_sens_t* TS_enum, TC_type_t* Type)
+{
+	uint8_t CR0_addr = 0x80;
+
+	for(temp_sens_t i = TEMP_SENS_1; i &#60;= TEMP_SENS_12; i++)
+	{
+		uint8_t CR1_cont_1 = CR1_content;
+		uint8_t CR1_cont_2 = CR1_content;
+		chip_sel_temp_sens(i, ON);
+
+		HAL_SPI_Transmit(&hspi1, &CR0_addr, 1, 0xFFFF);
+		HAL_SPI_Transmit(&hspi3, &CR0_addr, 1, 0xFFFF);
+
+		HAL_SPI_Transmit(&hspi1, &CR0_content, 1, 0xFFFF);
+		HAL_SPI_Transmit(&hspi3, &CR0_content, 1, 0xFFFF);
+
+		CR1_cont_1 |= (uint8_t)Type[i];
+		CR1_cont_2 |= (uint8_t)Type[i];
+
+		HAL_SPI_Transmit(&hspi1, &CR1_cont_1, 1, 0xFFFF);
+		HAL_SPI_Transmit(&hspi3, &CR1_cont_2, 1, 0xFFFF);
+
+		chip_sel_temp_sens(i, OFF);
+	}
+}
+
+void Set_1_sensor(uint8_t CR0_content, uint8_t CR1_content, TC_type_t Type, uint8_t channel)
+{
+	SPI_HandleTypeDef* spi;
+	if(channel &#60; 12)
+		spi = &hspi1;
+	else
+		spi = &hspi3;
+
+	uint8_t CR0_addr = 0x80;
+	uint8_t CR1_cont = CR1_content;
+
+	chip_sel_temp_sens(channel, ON);
+
+	HAL_SPI_Transmit(spi, &CR0_addr, 1, 0xFFFF);
+
+	HAL_SPI_Transmit(spi, &CR0_content, 1, 0xFFFF);
+
+	CR1_cont |= (uint8_t)Type;
+
+	HAL_SPI_Transmit(spi, &CR1_cont, 1, 0xFFFF);
+
+	chip_sel_temp_sens(channel, OFF);
+}
+
+/* Function for getting values of fault registers in data sensors
+ * Parameters:
+ * 		 sensor_pair - number of sensor pair (data sensors: sensor_pair & sensor_pair+12)
+ * 		 Buff - pointer to array, for data to be stored
+ */
+void get_fault_regs (uint8_t* Buff) //temp_sens_t* sensor_pair, uint8_t* Buff)
+{
+	// Addresses of registers with temperature data (LSB-&#62;MSB)
+	uint8_t fault_addr = 0x0F;
+
+	for(temp_sens_t i = TEMP_SENS_1; i &#60;= TEMP_SENS_12; i++)
+	{
+		chip_sel_temp_sens(i, ON);
+
+		HAL_SPI_Transmit(&hspi1, &fault_addr, 1, 0xFFFF);
+		HAL_SPI_Transmit(&hspi3, &fault_addr, 1, 0xFFFF);
+
+		HAL_SPI_Receive(&hspi1, &Buff[i], 1, 0xFFFF);
+		HAL_SPI_Receive(&hspi3, &Buff[i+12], 1, 0xFFFF);
+
+		chip_sel_temp_sens(i, OFF);
+	}
+}
+
+					</code>
+					</pre>
+
+				<!-- Footer -->
+					<footer id="footer">
+						<div class="inner">
+							<section>
+								<h2>Kontakte</h2>
+								<ul class="icons">
+									<li><a href="https://www.linkedin.com/in/bohdan-ko/" class="icon brands style2 fa-linkedin"><span class="label">LinkedIn</span></a></li>
+									<!-- <li><a href="#" class="icon brands style2 fa-facebook-f"><span class="label">Facebook</span></a></li> -->
+									<li><a href="https://www.instagram.com/bohdan_ko1/" class="icon brands style2 fa-instagram"><span class="label">Instagram</span></a></li>
+									<li><a href="tel:+4915203957756" class="icon solid style2 fa-phone"><span class="label">Phone</span></a></li>
+									<li><a href="mailto:bohdankondratenko@gmail.com" class="icon solid style2 fa-envelope"><span class="label">Email</span></a></li>
+								</ul>
+							</section>
+							<ul class="copyright">
+								<li>&copy; Untitled. All rights reserved</li><li>Design: <a href="http://html5up.net">HTML5 UP</a></li>
+							</ul>
+						</div>
+					</footer>
+
+			</div>
+
+		<!-- Scripts -->
+			<script src="../../assets/js/jquery.min.js"></script>
+			<script src="../../assets/js/browser.min.js"></script>
+			<script src="../../assets/js/breakpoints.min.js"></script>
+			<script src="../../assets/js/util.js"></script>
+			<script src="../../assets/js/main.js"></script>
+			<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/prism.min.js"></script>
+
+	</body>
+</html>

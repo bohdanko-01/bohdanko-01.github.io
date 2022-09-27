@@ -1,0 +1,258 @@
+﻿<!DOCTYPE HTML>
+<!--
+	Template Phantom by HTML5 UP
+	Downloaded from html5up.net | @ajlkn
+	Changed by Bohdan Kondratenko for Job Application Purposes
+-->
+<html>
+	<head>
+		<title>Tim_ATmega328p.c</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+		<link rel="stylesheet" href="../../assets/css/main.css" />
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/themes/prism.min.css"/>
+		<noscript><link rel="stylesheet" href="../../assets/css/noscript.css" /></noscript>
+	</head>
+
+	<body class="is-preload">
+
+		<button onclick="history.back()" id="arrow_back_outline" title="Back">
+			<span id="arrow_back"></span>
+		</button>
+
+		<button onclick="topFunction()" id="arrow_top_outline" title="Scroll up">
+			<span id="arrow_top"></span>
+		</button>
+
+		<!-- Wrapper -->
+			<div id="wrapper">
+
+				<!-- Header -->
+					<header id="header">
+						<div class="inner">
+
+							<!-- Logo -->
+								<a href="../../index.html" class="logo">
+									<span class="symbol"><img src="../../images/logo.svg" alt="" /></span><span class="title">Bohdan Kondratenko</span>
+								</a>
+
+						</div>
+					</header>
+
+				<!-- Main -->
+				<h2>Tim_ATmega328p.c</h2>
+				<pre>
+					<code class="language-clike">
+#include "Tim_ATmega328p.h"
+
+/* Setting period of simple continuous interrupts for a chosen Timer
+ *  Timer (TIM0, TIM1, TIM2)
+ *  Mode - Mode of how the Timer works (PWM, OVERFLOW_INT, ADC_TRIGGERING)
+ *  Period_us - Period for PWM or interrupt generation
+ */
+my_bool TIMER_Set(tim_t Timer, tim_mode_t Mode, unsigned long Period_us)
+{
+  switch(Timer) 
+  {
+    case TIM0: // For AVR MCUs - 8 Bit Timer
+    {
+      switch(Mode)
+      {
+        case PWM:
+        {
+          
+        }break;
+        case OUT_COMP_A:
+        {
+          
+        }break;
+        default: ;//Serial.println("The mode of TIM2 is still not handled in this version");
+      } // switch(Mode)
+    } break; // case TIM0
+
+    case TIM1:  // For AVR MCUs - 16 Bit Timer
+    {
+      switch(Mode)
+      {
+        case OUT_COMP_A:
+        {
+          
+        } break; // case OVERFLOW_INT
+		case PWM: // PWM for the channel A (experimental) Fast PWM, 10-bit, TOP = 0x03FF, PWM Pin - PB1 (Arduino D9)
+		{
+			// Here - Period_us = PWM Duty Cycle
+			// F_PWM = F_CPU / (psc * (1 + 0x03FF)) 
+			TCCR1A |= (1&#60;&#60;COM1A1) | (1&#60;&#60;WGM11) | (1&#60;&#60;WGM10);
+			TCCR1B |= (1&#60;&#60;WGM12);
+			TIMSK1 |= (1&#60;&#60;TOIE1);             // Enable Timer 1 overflow interrupt 
+			
+			// Prescaler = 0, PWM Period = 15625 Hz
+			if(Period_us &#62; 100)
+			{
+				Period_us = 100;
+			}
+			OCR1A = (0x03FF * Period_us / 100);
+			
+			TCCR1B |= (1&#60;&#60;CS10); // Start timer
+		} break; 
+        default: ;//Serial.println("The mode of TIM2 is still not handled in this version");
+      } // switch(Mode), TIM 1
+    } break; // case TIM1
+      
+    case TIM2:  // For AVR MCUs - 8 Bit Timer
+    {
+      switch(Mode)
+      {
+		case TIM2_A_SOUND_PWM:  // the following setting is made for the "Intercom" project. Setting is made for the same frequency as ADC Triggering. the commented section - for a free project.
+        {
+		 
+         /**************** Chosen PWM Mode is "Fast PWM" using Channel A with top on 0xFF (bits WGM22..WGM20 = 3 = 0b011) ****************/
+         /*                                    /\  /\ 
+          *                                   /  \/  \/
+          *                                   _|¯|_|¯|_
+          */
+          TCCR2A |= (1&#60;&#60;COM2A1) | (1&#60;&#60;WGM21) | (1&#60;&#60;WGM20);			// COM2A1-COM2A0 = 10: Non inverting
+																					// WGM22-WGM20 = 011: Fast PWM 8-bit
+															   
+          // fOC1PWM = f_CPU / (N * (1 + TOP)); Where N is Prescaler and TOP is 0xff in the chosen mode
+        
+          TCNT2 = 0;								        
+          OCR2A = 0;                        // No default PWM frequency
+          TIMSK2 |= (1&#60;&#60;TOIE2);             // Enable Timer 2 overflow interrupt 
+		  
+		  TCCR2B |=  (1&#60;&#60;CS20) ;            // Start Timer 2 (prescaler = 1) 
+        } break; // case TIM2_CHA_SOUND_PWM 
+        case OUT_COMP_A:
+        {
+          uint16_t prescaler = set_TIM2_prescaler(Period_us, Mode);
+
+          uint16_t Ticks_required;
+          Ticks_required = F_CPU/prescaler/1e6*Period_us-1;
+     
+          OCR2A = (uint8_t)Ticks_required;
+     
+          TIMSK2=(1&#60;&#60;OCF2A);                             // Beginning of TIM2 COMP_A overflow interrupts
+      
+          //Serial.println("\nPrescaler of TIM2: " + (String)prescaler);
+          //Serial.println("Ticks required: " + (String)Ticks_required);
+          
+        } break; // case OVERFLOW_INT:
+
+        default: ;//Serial.println("The mode of TIM2 is still not handled in this version");
+      } // switch(Mode)
+    } break; // case TIM2;
+  }   // switch(Timer)
+
+  return HIGH;
+}
+
+/* Setting the PWM Value for the TIM1, set in a 10 bit Fast PWM Mode
+*/
+void TIM1_Set_PWM(uint8_t Duty_PWM)
+{
+	OCR1A = ((long)0x03FF * Duty_PWM / 100);
+}
+
+/*  Calculating the prescaler for the Timer
+ *  Arguments:
+ *    Period us - period value counted in us
+ *    Mode - mode of Timer work
+ */
+uint16_t set_TIM2_prescaler(unsigned long Period_us, tim_mode_t Mode)
+{
+  /***************** Setting the CS20..CS22 prescaler Bits in TCCR2B Register ****************/
+  /* 
+   *  The prescaler setting is set to the highest precision but the highest amount of timer ticks
+   *  to reduse the precision and decrease the amount of ticks - delete the "else's" after "if's"
+   */
+
+   uint16_t prescaler = 0;
+   switch(Mode)
+   {
+      case OUT_COMP_A:
+      {
+          if(Period_us &#62; 16320) // 16320 us is the highehst value for the 8Bit Timer 2
+          {
+              //Serial.println("TIM2 Period too high. Breakdown");
+              return LOW;
+          }
+                  
+          if((Period_us &#62;= 1) && (Period_us &#60; 15))  // Then needed Prescaler = 1 (no Prescaling)
+          {
+              TCCR2B |= (1&#60;&#60;CS20);
+              prescaler = 1;
+          } else
+          if((Period_us &#62;= 1) && (Period_us &#60; 126)) // Then needed Prescaler = 8
+          {
+              TCCR2B |= (1&#60;&#60;CS21);
+              prescaler = 8;
+          } else
+          if((Period_us &#62;= 2) && (Period_us &#60; 510)) // Then needed Prescaler = 32 // interruptions occur too slow with this Prescaler. reason unknown           
+          {
+              TCCR2B |= (1&#60;&#60;CS20) | (1&#60;&#60;CS21);
+              prescaler = 32;
+          } else
+          if((Period_us &#62;= 4) && (Period_us &#60; 1020)) // Then needed Prescaler = 64
+          {
+              TCCR2B |= (1&#60;&#60;CS22);
+              prescaler = 64;
+          } else
+          if((Period_us &#62;= 8) && (Period_us &#60; 2040)) // Then needed Prescaler = 128
+          {
+              TCCR2B |= (1&#60;&#60;CS20) | (1&#60;&#60;CS22);
+              prescaler = 128;
+          } else
+          if((Period_us &#62;= 16) && (Period_us &#60; 4080)) // Then needed Prescaler = 256
+          {
+              TCCR2B |= (1&#60;&#60;CS21) | (1&#60;&#60;CS22);
+              prescaler = 256;
+          } else
+          if((Period_us &#62;= 64) && (Period_us &#60;= 16320)) // Then needed Prescaler = 1024
+          {
+             TCCR2B |= (1&#60;&#60;CS20) | (1&#60;&#60;CS21) | (1&#60;&#60;CS22);
+             prescaler = 1024;
+          }
+      } break; // case OVERFLOW_INT
+      default:
+      {
+        //Serial.println("Chosen mode for TIM2 Prescaler setting is still not implemented.");
+      }
+   } // switch(Mode)
+   
+   return prescaler;
+}
+
+					</code>
+					</pre>
+
+				<!-- Footer -->
+					<footer id="footer">
+						<div class="inner">
+							<section>
+								<h2>Kontakte</h2>
+								<ul class="icons">
+									<li><a href="https://www.linkedin.com/in/bohdan-ko/" class="icon brands style2 fa-linkedin"><span class="label">LinkedIn</span></a></li>
+									<!-- <li><a href="#" class="icon brands style2 fa-facebook-f"><span class="label">Facebook</span></a></li> -->
+									<li><a href="https://www.instagram.com/bohdan_ko1/" class="icon brands style2 fa-instagram"><span class="label">Instagram</span></a></li>
+									<li><a href="tel:+4915203957756" class="icon solid style2 fa-phone"><span class="label">Phone</span></a></li>
+									<li><a href="mailto:bohdankondratenko@gmail.com" class="icon solid style2 fa-envelope"><span class="label">Email</span></a></li>
+								</ul>
+							</section>
+							<ul class="copyright">
+								<li>&copy; Untitled. All rights reserved</li><li>Design: <a href="http://html5up.net">HTML5 UP</a></li>
+							</ul>
+						</div>
+					</footer>
+
+			</div>
+
+		<!-- Scripts -->
+			<script src="../../assets/js/jquery.min.js"></script>
+			<script src="../../assets/js/browser.min.js"></script>
+			<script src="../../assets/js/breakpoints.min.js"></script>
+			<script src="../../assets/js/util.js"></script>
+			<script src="../../assets/js/main.js"></script>
+			<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/prism.min.js"></script>
+
+	</body>
+</html>

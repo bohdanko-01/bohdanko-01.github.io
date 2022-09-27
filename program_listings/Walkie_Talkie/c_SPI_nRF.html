@@ -1,0 +1,392 @@
+﻿<!DOCTYPE HTML>
+<!--
+	Template Phantom by HTML5 UP
+	Downloaded from html5up.net | @ajlkn
+	Changed by Bohdan Kondratenko for Job Application Purposes
+-->
+<html>
+	<head>
+		<title>SPI.c</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+		<link rel="stylesheet" href="../../assets/css/main.css" />
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/themes/prism.min.css"/>
+		<noscript><link rel="stylesheet" href="../../assets/css/noscript.css" /></noscript>
+	</head>
+
+	<body class="is-preload">
+
+		<button onclick="history.back()" id="arrow_back_outline" title="Back">
+			<span id="arrow_back"></span>
+		</button>
+
+		<button onclick="topFunction()" id="arrow_top_outline" title="Scroll up">
+			<span id="arrow_top"></span>
+		</button>
+
+		<!-- Wrapper -->
+			<div id="wrapper">
+
+				<!-- Header -->
+					<header id="header">
+						<div class="inner">
+
+							<!-- Logo -->
+								<a href="../../index.html" class="logo">
+									<span class="symbol"><img src="../../images/logo.svg" alt="" /></span><span class="title">Bohdan Kondratenko</span>
+								</a>
+
+						</div>
+					</header>
+
+				<!-- Main -->
+				<h2>SPI.c</h2>
+				<pre>
+					<code class="language-clike">
+/*
+ * SPI.c
+ * SPI Interface functions. Written for setting connection between nRF24L01 Single Chip 2.4GHz Transceiver module and MCU
+ * Created: 23.04.2022 13:36:45
+ *  Author: Bohdan
+ */ 
+
+#include "main.h"
+#include &#60;util/delay.h&#62;			// allows usage of _delay_ms_();
+#include &#60;stdio.h&#62;				// defines sprintf();
+
+#include "UART_avr.h"
+#include "PIN_avr.h"
+#include "SPI_nRF.h"
+#include "SPI_nRF_Registers.h"
+
+char pr_str[32];  // debug string
+
+extern nRF_t nRF_module;
+/*
+ * Setting up the SPI Interface for usage in connection between nRF Module and MCU
+ */ 
+void SPI_set(uint16_t F_Khz)
+{	
+	switch(F_Khz)
+	{
+		case 4000:  // 4 MHz
+		{
+			
+		} break;
+		case 1000:  // 1 MHz
+		{
+			SPCR |= (1&#60;&#60;SPR0);
+		} break;
+		case 250:  // 250 kHz
+		{
+			SPCR |= (1&#60;&#60;SPR1);
+		} break;
+		case 125:  // 125 kHz
+		{
+			SPCR |= (1&#60;&#60;SPR1)|(1&#60;&#60;SPR0);
+		} break;
+		case 8000:  // 8 MHz
+		{
+			SPSR |= (1&#60;&#60;SPI2X);
+		} break;
+		case 2000:  // 2 MHz
+		{
+			SPSR |= (1&#60;&#60;SPI2X);
+			SPCR |= (1&#60;&#60;SPR0);
+		} break;
+		case 500:  // 500 kHz
+		{
+			SPSR |= (1&#60;&#60;SPI2X);
+			SPCR |= (1&#60;&#60;SPR1);
+		} break;
+		
+		default: break;  // default value - 4 MHz frequency
+	}
+	
+	/* Set MOSI and SCK output, all others input */
+	DDRB |= (1&#60;&#60;3)|(1&#60;&#60;5);  // MOSI, SCK pin
+	
+	/* Enable SPI, Master, set clock rate fck/16 */
+	//SPCR |= (1&#60;&#60;SPE)|(1&#60;&#60;DORD)|(1&#60;&#60;MSTR);  // Bits SPI2X SPR1 SPR0 = 0; DORD = 1 - LSB is sent first
+	SPCR |= (1&#60;&#60;SPE)|(1&#60;&#60;MSTR);  // Bits SPI2X SPR1 SPR0 = 0; DORD = 0 - MSB is sent first
+}
+
+/*
+ * Setting up a structure with SPI Settings for nRF (Maybe not needed?) 
+ * Setting the SPI Interface
+ */
+void nRF_setup(nRF_t* nRF, rf_freq _f_kHz, rf_pwr _pwr, rf_mode _mode, pin_t _CE_pin, pin_t _CSN_pin)
+{
+	nRF-&#62;mode = _mode;
+	nRF-&#62;F_Khz = _f_kHz;
+	nRF-&#62;PWR = _pwr;
+	//nRF-&#62;SS_pin = _CE_pin;
+	nRF-&#62;CE_pin = _CE_pin;
+	nRF-&#62;CSN_pin = _CSN_pin;
+	
+	/* Setting up the CS and CSN Pins (Levels taken from an example) */
+	pin_mode(_CE_pin, OUTPUT);
+	pin_mode(_CSN_pin, OUTPUT);
+	//pin_write(_CE_pin, LOW); let it be stock mode so far (radio)
+	pin_write(_CSN_pin, HIGH);
+	
+	SPI_set(_f_kHz);
+	
+	_delay_ms(5);  // wait until the radio module sets up
+	
+	// Setting RF_SETUP register:
+	// Reading the current state of setup register (debugging)
+	uint8_t SETUP_REG_old = R_REGISTER(nRF, RF_SETUP_REG);  // reading the status register of nRF Module
+	sprintf(pr_str, "Read Setup Reg: %d\n", SETUP_REG_old);
+	print_str(pr_str);
+	
+	uint8_t SETUP_REG_new = 0;
+	
+	//setting the transfer rate:
+	switch(_f_kHz)
+	{
+		case F_250kbps: SETUP_REG_new |= (1&#60;&#60;RF_DR_LOW); break;
+		case F_1Mbps:   SETUP_REG_new |= (1&#60;&#60;RF_DR_HIGH); break;
+		case F_2Mbps:    break;
+	}
+	
+	// setting the power rate:
+	switch(_pwr)
+	{
+		case PWR_m18dBm: break;
+		case PWR_m12dBm: SETUP_REG_new |= (1&#60;&#60;RF_PWR_LOW); break;
+		case PWR_m6dBm:  SETUP_REG_new |= (1&#60;&#60;RF_PWR_HIGH); break;
+		case PWR_m0dBm:	 SETUP_REG_new |= (1&#60;&#60;RF_PWR_HIGH)|(1&#60;&#60;RF_PWR_LOW); break;
+	}
+	
+	sprintf(pr_str, "SETUP_REG_new = %d\n", SETUP_REG_new); // debug purposes
+	print_str(pr_str);
+	
+	if(SETUP_REG_old != SETUP_REG_new)						// Overwriting only if it is actually needed 
+	{
+		sprintf(pr_str, "Writing needed\n"); // debug purposes
+		print_str(pr_str);
+		W_REGISTER(nRF, RF_SETUP_REG, SETUP_REG_new);		// writing the created value of the setup register
+	}
+	
+	sprintf(pr_str, "SETUP_REG now = %d\n", R_REGISTER(nRF, RF_SETUP_REG)); // debug purposes
+	print_str(pr_str);
+	
+}
+
+/*
+ * A byte of informations cData is sent, after the  SPIF bit set - the transmission is accomplished and the 
+ */
+uint8_t SPI_TR_Byte(nRF_t* nRF, uint8_t cData) // Looks more like just reading of a register
+{
+	pin_write(nRF-&#62;CSN_pin, LOW);
+	
+	SPDR = cData;  // Start transmission
+	
+	//sprintf(pr_str, "Transferring: %d\n", cData);
+	//print_str(pr_str);
+	
+	
+	while(!(SPSR & (1&#60;&#60;SPIF)));  // Wait for PREVIOUS transmission to complete
+	
+	pin_write(nRF-&#62;CSN_pin, HIGH);
+	
+	return(SPDR);
+}
+
+/*
+ *
+ */
+void SPI_TR_str(nRF_t* nRF, uint8_t* arr, uint8_t length)
+{
+	pin_write(nRF-&#62;CSN_pin, LOW);
+	for(uint8_t i = 0; i &#60; length; i++)
+	{
+		SPDR = arr[i];  // Start transmission
+		while(!(SPSR & (1&#60;&#60;SPIF)));  // Wait for PREVIOUS transmission to complete
+		sprintf(pr_str, "Sent byte %d\n", arr[i]);
+		print_str(pr_str);
+	}
+	pin_write(nRF-&#62;CSN_pin, HIGH);
+}
+
+
+/************************** Functions from the Table 20, Page 51, Document "nRF24L01P_Product_Specification_1_0.pdf" **************************/
+
+/*
+ *
+ */
+uint8_t R_REGISTER(nRF_t* nRF, uint8_t register_addr)  // R_REGISTER Command from Page 51 of Document "nRF24L01P_Product_Specification_1_0.pdf"
+{
+	// Example of information to be transferred: 0b 000A AAAA where AAAAA - Address of the Register to be red
+	//uint8_t send_byte = 0b11111111;
+	uint8_t return_byte;
+	
+	return_byte = SPI_TR_Byte(nRF, register_addr);
+	return(return_byte);
+}
+
+/*
+ *
+ */
+void W_REGISTER(nRF_t* nRF, uint8_t register_addr, uint8_t data)  // W_REGISTER Command from Page 51 of Document "nRF24L01P_Product_Specification_1_0.pdf"
+{
+	//pin_write(nRF-&#62;CSN_pin, LOW);
+	//_delay_ms(1);
+	
+	/******************* Weird stuff. Trying to go to the power down mode *******************
+	uint8_t CONFIG_OLD = R_REGISTER(nRF, CONFIG_REG);
+	
+	sprintf(pr_str, "CONFIG REG = %d\n", CONFIG_OLD);
+	print_str(pr_str);
+	
+	uint8_t go_to_PD[2];
+	go_to_PD[0] = CONFIG_REG | 0b00100000;
+	go_to_PD[1] = CONFIG_OLD &~(1&#60;&#60;PWR_UP);
+	sprintf(pr_str, "CONFIG REG NEW = %d\n", go_to_PD[1]);
+	print_str(pr_str);
+	
+	SPI_TR_str(nRF, go_to_PD, 2);
+	
+	//_delay_ms(1);
+	************************************************************************************************************************/
+	
+	// Example of information to be transferred: 0b 001A AAAA where AAAAA - Address of the Register to be written
+	uint8_t comand[2]; // forming an array that will be transferred
+	
+	comand[0] = 0b00100000 | register_addr;
+	comand[1] = data; 
+	
+	sprintf(pr_str, "Writing...\nByte 1: %d\nByte 2: %d\n", comand[0], comand[1]);
+	print_str(pr_str);
+	
+	SPI_TR_str(nRF, comand, 2);
+	//pin_write(nRF-&#62;CSN_pin, HIGH);
+}
+
+/*
+ *
+ */
+void R_RX_PAYLOAD(nRF_t* nRF)  // R_RX_PAYLOAD Command from Page 51 of Document "nRF24L01P_Product_Specification_1_0.pdf"
+{
+	uint8_t RX_PAYLOAD_byte = 0b01100001;
+	
+	SPI_TR_Byte(nRF, RX_PAYLOAD_byte);
+}
+
+/*
+ *
+ */
+void W_TX_PAYLOAD(nRF_t* nRF)  // W_TX_PAYLOAD Command from Page 51 of Document "nRF24L01P_Product_Specification_1_0.pdf"
+{
+	uint8_t WX_PAYLOAD_byte = 0b10100000;
+	
+	SPI_TR_Byte(nRF, WX_PAYLOAD_byte);
+}
+
+/*
+ *
+ */
+void FLUSH_TX(nRF_t* nRF)  // FLUSH_TX Command from Page 51 of Document "nRF24L01P_Product_Specification_1_0.pdf"
+{
+	uint8_t FLUSH_TX_byte = 0b11100001; 
+	
+	SPI_TR_Byte(nRF, FLUSH_TX_byte);
+}
+
+/*
+ *
+ */
+void FLUSH_RX(nRF_t* nRF)  // FLUSH_RX Command from Page 51 of Document "nRF24L01P_Product_Specification_1_0.pdf"
+{
+	uint8_t FLUSH_RX_byte = 0b11100010;
+	
+	SPI_TR_Byte(nRF, FLUSH_RX_byte);
+}
+
+/*
+ *
+ */
+void REUSE_TX_PL(nRF_t* nRF)  // REUSE_TX_PL Command from Page 51 of Document "nRF24L01P_Product_Specification_1_0.pdf"
+{
+	uint8_t REUSE_TX_PL_byte = 0b11100011;
+	
+	SPI_TR_Byte(nRF, REUSE_TX_PL_byte);
+}
+
+/*
+ *
+ */
+void R_RX_PL_WID(nRF_t* nRF)  // R_RX_PL_WID Command from Page 51 of Document "nRF24L01P_Product_Specification_1_0.pdf"
+{
+	uint8_t R_RX_PL_WID_byte = 0b01100000;
+	
+	SPI_TR_Byte(nRF, R_RX_PL_WID_byte);
+}
+
+/*
+ *
+ */
+void W_ACK_PAYLOAD(nRF_t* nRF)  // W_ACK_PAYLOAD Command from Page 51 of Document "nRF24L01P_Product_Specification_1_0.pdf"
+{
+	//uint8_t W_ACK_PAYLOAD_byte = 0b10101PPP;
+	
+	//SPI_TR_Byte(nRF, W_ACK_PAYLOAD_byte);
+}
+
+/*
+ *
+ */
+void W_TX_PAYLOAD_NOACK(nRF_t* nRF)  // W_TX_PAYLOAD_NOACK Command from Page 51 of Document "nRF24L01P_Product_Specification_1_0.pdf"
+{
+	uint8_t W_TX_PAYLOAD_NOACK_byte = 0b10110000;
+	
+	SPI_TR_Byte(nRF, W_TX_PAYLOAD_NOACK_byte);
+}
+
+/*
+ *
+ */
+uint8_t NOP(nRF_t* nRF)  // NOP Command from Page 51 of Document "nRF24L01P_Product_Specification_1_0.pdf"
+{
+	uint8_t NOP_byte = 0b11111111;
+	uint8_t return_byte;
+	
+	return_byte = SPI_TR_Byte(nRF, NOP_byte);
+	return(return_byte);
+}
+
+					</code>
+					</pre>
+
+				<!-- Footer -->
+					<footer id="footer">
+						<div class="inner">
+							<section>
+								<h2>Kontakte</h2>
+								<ul class="icons">
+									<li><a href="https://www.linkedin.com/in/bohdan-ko/" class="icon brands style2 fa-linkedin"><span class="label">LinkedIn</span></a></li>
+									<!-- <li><a href="#" class="icon brands style2 fa-facebook-f"><span class="label">Facebook</span></a></li> -->
+									<li><a href="https://www.instagram.com/bohdan_ko1/" class="icon brands style2 fa-instagram"><span class="label">Instagram</span></a></li>
+									<li><a href="tel:+4915203957756" class="icon solid style2 fa-phone"><span class="label">Phone</span></a></li>
+									<li><a href="mailto:bohdankondratenko@gmail.com" class="icon solid style2 fa-envelope"><span class="label">Email</span></a></li>
+								</ul>
+							</section>
+							<ul class="copyright">
+								<li>&copy; Untitled. All rights reserved</li><li>Design: <a href="http://html5up.net">HTML5 UP</a></li>
+							</ul>
+						</div>
+					</footer>
+
+			</div>
+
+		<!-- Scripts -->
+			<script src="../../assets/js/jquery.min.js"></script>
+			<script src="../../assets/js/browser.min.js"></script>
+			<script src="../../assets/js/breakpoints.min.js"></script>
+			<script src="../../assets/js/util.js"></script>
+			<script src="../../assets/js/main.js"></script>
+			<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/prism.min.js"></script>
+
+	</body>
+</html>

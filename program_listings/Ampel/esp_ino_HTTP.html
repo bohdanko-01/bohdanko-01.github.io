@@ -1,0 +1,298 @@
+﻿<!DOCTYPE HTML>
+<!--
+	Template Phantom by HTML5 UP
+	Downloaded from html5up.net | @ajlkn
+	Changed by Bohdan Kondratenko for Job Application Purposes
+-->
+<html>
+	<head>
+		<title>HTTP.ino</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+		<link rel="stylesheet" href="../../assets/css/main.css" />
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/themes/prism.min.css"/>
+		<noscript><link rel="stylesheet" href="../../assets/css/noscript.css" /></noscript>
+	</head>
+
+	<body class="is-preload">
+
+		<button onclick="history.back()" id="arrow_back_outline" title="Back">
+			<span id="arrow_back"></span>
+		</button>
+
+		<button onclick="topFunction()" id="arrow_top_outline" title="Scroll up">
+			<span id="arrow_top"></span>
+		</button>
+
+		<!-- Wrapper -->
+			<div id="wrapper">
+
+				<!-- Header -->
+					<header id="header">
+						<div class="inner">
+
+							<!-- Logo -->
+								<a href="../../index.html" class="logo">
+									<span class="symbol"><img src="../../images/logo.svg" alt="" /></span><span class="title">Bohdan Kondratenko</span>
+								</a>
+
+						</div>
+					</header>
+
+				<!-- Main -->
+				<h2>HTTP.ino</h2>
+				<pre>
+					<code class="language-clike">
+#include "HTTP.h"
+
+void send_POST(char* Line)
+{
+  if(WiFi.status()== WL_CONNECTED)
+  {
+    //HTTPClient http;
+    // Your Domain name with URL path or IP address with path
+
+    String httpRequestData = "api_key=" + Ampel_state_apiKey +"&ampel_1=" + (String)Line[4]+"&ampel_2=" + (String)Line[5]+"&ampel_3=" + (String)Line[6]+"&ampel_4=" + (String)Line[7]+"&ampel_5=" + (String)Line[8];
+
+    http.begin(serverName);
+    
+    http.addHeader("Content-Type", "application/x-www-form-urlencoded");    
+     //Serial.print("\nhttpRequestData: ");
+    //Serial.println(httpRequestData);
+    
+    // Send HTTP POST request
+    int httpResponseCode = 0;
+
+    httpResponseCode = http.POST(httpRequestData);
+    String payload = http.getString();
+    if (httpResponseCode&#62;0) 
+    {
+      Serial.println("Sent");
+      Serial.print("HTTP Response code: ");
+      Serial.println(httpResponseCode);
+      //Serial.print("Payload: ");
+      //Serial.println(payload);
+    }
+    else {
+      Serial.println("Not sent");
+      //Serial.print("Error code: ");
+      //Serial.println(httpResponseCode);
+    }
+    // Free resources
+    http.end();
+ }
+ else
+ {
+   //Serial.println("No WiFi connection\nESP-01 is Creating an Acess Point");
+   //Serial.println("Network Name: " + (String)AccessPoint_name);
+   //Serial.println("Network Password: " + (String)AccessPoint_password);
+   //WiFi.softAP(AccessPoint_name, AccessPoint_password);
+   Status.WiFi_Connected = 0;
+   digitalWrite(2, HIGH);                               // WiFi disconnected! Turn OFF the LED
+ }
+}
+
+void Get_Ext_IP(char* Line, char* adress)
+{
+  WiFiClient client;
+  TextFinder finder(client);
+
+  if (client.connect(global_IP_Server, 80)) 
+  { 
+    //Serial.println("Connected - Acquiring WAN IP:");
+    //make HTTP request
+    client.println("GET /");
+    client.println();
+    delay(1000);
+  }//end if 
+  else 
+  { // you didn't get a connection to the server:
+   Serial.println("connection failed");
+  }//end else
+
+  while (client.available()) 
+  {
+    char c = client.read();
+    //Serial.print("First readed shit: ");
+    //Serial.println(c);
+   if (client.available()) 
+   { 
+    if(finder.find("IP Address: "))
+    {
+      for (char k = 0; k &#60; 17; k++)
+      {
+        c = client.read();
+        if(c != '&#60;')
+        {
+          //Serial.print(c);
+          Line[k] = c;
+        } //endif
+         else 
+          break;
+      }//end for
+     }//end if
+   }//end if
+   client.flush(); 
+   client.stop();
+  }
+}
+
+void POST_Ext_IP(const char* Site_Address, char* IP_address, char* password)
+{
+  if(WiFi.status()== WL_CONNECTED)
+  {
+    //HTTPClient http;
+
+    String httpRequestData = "api_key2=" + (String)password +"&Modul_address=" + "http://" + (String)IP_address + "/SET";
+    //String httpRequestData = "api_key2=" + (String)password +"&Modul_address=" + "http://" + (String)IP_address;
+    //String httpRequestData = "api_key2=" + (String)password +"&Modul_address=" + (String)IP_address;
+    
+    http.begin(Site_Address);
+    
+    http.addHeader("Content-Type", "application/x-www-form-urlencoded");    
+    Serial.print("\nhttpRequestData: ");
+    Serial.println(httpRequestData);
+
+    int httpResponseCode = 0;
+
+    httpResponseCode = http.POST(httpRequestData);
+    String payload = http.getString();
+    if (httpResponseCode&#62;0) 
+    {
+      Serial.println("External IP Sent");
+      Serial.print("HTTP Response code: ");
+      Serial.println(httpResponseCode);
+      //Serial.print("Payload: ");
+      //Serial.println(payload);
+    }
+    else 
+    {
+      Serial.println("External IP WASN`T sent");
+      //Serial.print("Error code: ");
+      //Serial.println(httpResponseCode);
+    }
+    // Free resources
+    http.end();
+  }
+  else
+  {
+    //Serial.println("No WiFi connection\nESP-01 is Creating an Acess Point");
+    //Serial.println("Network Name: " + (String)AccessPoint_name);
+    //Serial.println("Network Password: " + (String)AccessPoint_password);
+    //WiFi.softAP(AccessPoint_name, AccessPoint_password);
+    Status.WiFi_Connected = 0;
+    digitalWrite(2, HIGH);                               // WiFi disconnected! Turn OFF the LED
+  }
+}
+
+void Get_time(status_flags_t* Status)
+{
+  String Date_and_time;
+  
+    /***************************** TIME SYNCHRONISATION PROCESS *****************************/
+  if(WiFi.status()== WL_CONNECTED)
+  {
+    WiFiUDP ntpUDP;
+    const long utcOffsetInSeconds = 60*60; // for germany (GMT+1 = 60min * 60 sec)
+    NTPClient timeClient(ntpUDP, "pool.ntp.org", utcOffsetInSeconds);
+    //unsigned long epochTime = timeClient.getEpochTime();
+  
+    timeClient.begin();
+    delay(500);
+  
+    timeClient.update();
+    unsigned long epochTime = timeClient.getEpochTime();
+    String formattedTime = timeClient.getFormattedTime(); 
+    struct tm *ptm = gmtime ((time_t *)&epochTime); 
+  
+    int monthDay = ptm-&#62;tm_mday;
+    int currentMonth = ptm-&#62;tm_mon+1;
+    int currentYear = ptm-&#62;tm_year+1900;
+ 
+    //formattedTime = timeClient.getFormattedTime(); 
+    if(currentYear &#60; 2000)
+      Date_and_time = "NOWIFI"; // Condition to prevent situations when connection with router is created, but router is not connected to the internet
+    else
+      Date_and_time = String(formattedTime) + ":" + String(currentYear) + ":" + String(currentMonth) + ":" + String(monthDay);
+  }
+  else
+  {
+    Date_and_time = "NOWIFI";
+    //Serial.println("No WiFi connection\nESP-01 is Creating an Acess Point");
+    //Serial.println("Network Name: " + (String)AccessPoint_name);
+    //Serial.println("Network Password: " + (String)AccessPoint_password);
+    //WiFi.softAP(AccessPoint_name, AccessPoint_password);
+    Status-&#62;WiFi_Connected = 0;
+    digitalWrite(2, HIGH);                               // WiFi disconnected! Turn OFF the LED
+  }
+
+  Serial.println(Date_and_time); 
+  /********************************************************************************************/
+}
+
+void Get_Ampel_states(status_flags_t* Status, const char* address)
+{
+  String Site_response;
+  i = 0;
+  
+  //WiFiClient client;
+  HTTPClient http;
+  //TextFinder finder(client);
+  //Serial.println("Connecting to " + (String)address);
+
+  //if (client.connect(address, 80)) 
+  if(WiFi.status()== WL_CONNECTED)
+  { 
+    http.begin(address);
+    http.GET();
+    Site_response = http.getString();
+    if(Site_response != "")
+      Serial.println(Site_response);
+    http.end();
+  }
+  else
+  {
+    Status-&#62;WiFi_Connected = 0;
+    digitalWrite(2, HIGH);                               // WiFi disconnected! Turn OFF the LED
+  }
+ 
+  //while (client.available()) 
+  //{
+    ///****************** PARSING THE RECEIVED DATA *********************/
+ // }
+ 
+}
+					</code>
+					</pre>
+
+				<!-- Footer -->
+					<footer id="footer">
+						<div class="inner">
+							<section>
+								<h2>Kontakte</h2>
+								<ul class="icons">
+									<li><a href="https://www.linkedin.com/in/bohdan-ko/" class="icon brands style2 fa-linkedin"><span class="label">LinkedIn</span></a></li>
+									<!-- <li><a href="#" class="icon brands style2 fa-facebook-f"><span class="label">Facebook</span></a></li> -->
+									<li><a href="https://www.instagram.com/bohdan_ko1/" class="icon brands style2 fa-instagram"><span class="label">Instagram</span></a></li>
+									<li><a href="tel:+4915203957756" class="icon solid style2 fa-phone"><span class="label">Phone</span></a></li>
+									<li><a href="mailto:bohdankondratenko@gmail.com" class="icon solid style2 fa-envelope"><span class="label">Email</span></a></li>
+								</ul>
+							</section>
+							<ul class="copyright">
+								<li>&copy; Untitled. All rights reserved</li><li>Design: <a href="http://html5up.net">HTML5 UP</a></li>
+							</ul>
+						</div>
+					</footer>
+
+			</div>
+
+		<!-- Scripts -->
+			<script src="../../assets/js/jquery.min.js"></script>
+			<script src="../../assets/js/browser.min.js"></script>
+			<script src="../../assets/js/breakpoints.min.js"></script>
+			<script src="../../assets/js/util.js"></script>
+			<script src="../../assets/js/main.js"></script>
+			<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/prism.min.js"></script>
+
+	</body>
+</html>

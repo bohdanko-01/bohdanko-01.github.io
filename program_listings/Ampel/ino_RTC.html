@@ -1,0 +1,219 @@
+﻿<!DOCTYPE HTML>
+<!--
+	Template Phantom by HTML5 UP
+	Downloaded from html5up.net | @ajlkn
+	Changed by Bohdan Kondratenko for Job Application Purposes
+-->
+<html>
+	<head>
+		<title>RTC.ino</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+		<link rel="stylesheet" href="../../assets/css/main.css" />
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/themes/prism.min.css"/>
+		<noscript><link rel="stylesheet" href="../../assets/css/noscript.css" /></noscript>
+	</head>
+
+	<body class="is-preload">
+
+		<button onclick="history.back()" id="arrow_back_outline" title="Back">
+			<span id="arrow_back"></span>
+		</button>
+
+		<button onclick="topFunction()" id="arrow_top_outline" title="Scroll up">
+			<span id="arrow_top"></span>
+		</button>
+
+		<!-- Wrapper -->
+			<div id="wrapper">
+
+				<!-- Header -->
+					<header id="header">
+						<div class="inner">
+
+							<!-- Logo -->
+								<a href="../../index.html" class="logo">
+									<span class="symbol"><img src="../../images/logo.svg" alt="" /></span><span class="title">Bohdan Kondratenko</span>
+								</a>
+
+						</div>
+					</header>
+
+				<!-- Main -->
+				<h2>RTC.ino</h2>
+				<pre>
+					<code class="language-clike">
+#include "RTC.h"
+#include "Lampen.h"
+
+void init_clock(my_clock_t* Clock)
+{
+  Clock-&#62;clock_pin_1 = A14; // Goes to IN1 on the Amplifier
+  Clock-&#62;clock_pin_2 = A15; // Goes to IN2 on the Amplifier
+
+  pinMode(Clock-&#62;clock_pin_1, OUTPUT);
+  pinMode(Clock-&#62;clock_pin_2, OUTPUT); 
+
+  Clock-&#62;tick_in_progress = false;
+  Clock-&#62;stopped = true;
+  
+  Clock-&#62;ticks_to_do = 0;
+  Clock-&#62;ticks_memory = 0;
+  Clock-&#62;polarity = NEGATIVE;
+  Clock-&#62;ticks_timer = 0;
+  Clock-&#62;impulse_period = CLOCK_IMPULSE_PERIOD;//CLOCK_TICK_PERIOD;
+  Clock-&#62;duty_cycle = CLOCK_IMP_DUTY_CYCLE;
+  Clock-&#62;tick_period = (uint16_t)((long)Clock-&#62;impulse_period*(long)100/(long)Clock-&#62;duty_cycle);
+}
+
+void RTC_Set_Time(status_flags_t* Status, ts* time_struct)
+{
+  char Time_line[20];
+  
+  Serial1.println("ret_time");
+  Serial.println("Time Request");
+  delay(2);
+
+  while(Status-&#62;debug_flag != 1)
+    UART_Routine(Status, Time_line, true);    
+  Status-&#62;debug_flag = 0;
+
+  /******** PARSING OF THE RECEIVED STRING ***********/
+  //Serial.print("Parsing the line:");
+  //Serial.println(Time_line);
+
+  if(!strcmp(Time_line, "NOWIFI"))  // Receiwed a signal about absence of WiFi connection. Do NOT set time then
+  {
+    DS3231_get(time_struct);
+    Serial.println("From ESP-12F: No WiFi Connection! Time not synchronized");
+  }
+  else
+  {
+    char* ptr = strtok(Time_line, ":");
+    char* ptr_temp = ptr;               // Pointer for implementing the atoi function
+    uint8_t i = 0;
+    while(ptr != NULL)
+    {
+      switch(i)
+      {
+        case 0:
+        {
+          time_struct-&#62;hour = atoi(ptr_temp);
+        } break;
+        case 1:
+        {
+          time_struct-&#62;min = atoi(ptr_temp);
+        } break;
+        case 2:
+        {
+          time_struct-&#62;sec = atoi(ptr_temp);
+        } break;
+        case 3:
+        {
+          time_struct-&#62;year = atoi(ptr_temp);
+        } break;
+        case 4:
+        {
+          time_struct-&#62;mon = atoi(ptr_temp);
+        } break;
+        case 5:
+        {
+          time_struct-&#62;mday = atoi(ptr_temp);
+        } break;
+      }
+    
+      ptr = strtok(NULL, ":");
+      ptr_temp = ptr;
+    
+      i++;
+    }
+  /*********** WRITING OF THE FILLED STRUCTURE TO THE MODUL *****************/
+    DS3231_set(*time_struct); 
+    Serial.println("From ESP-12F: Time synchronized succesfully!");
+  }
+}
+
+/*
+ * Calculating of clock ticks to do. Returns amount of Minutes - difference between first and second parameter
+ */
+int16_t calculate_Ticks(ts* RTC_time, my_time_t* EEPROM_time)
+{
+  int16_t ticks;
+  DS3231_get(RTC_time);
+  
+  Serial.println("RTC Time : " + (String)RTC_time-&#62;hour + ":" + (String)RTC_time-&#62;min);
+  Serial.print("EEPROM Time: " + (String)EEPROM_time-&#62;hours + ":" + (String)EEPROM_time-&#62;minutes);
+  
+  ticks = (int16_t)abs((int16_t)(RTC_time-&#62;hour)%12 - (int16_t)(EEPROM_time-&#62;hours)%12)*60 + abs((int16_t)(RTC_time-&#62;min) - (int16_t)(EEPROM_time-&#62;minutes));
+
+  // step from X.59 to X+1.00
+  if((RTC_time-&#62;hour == ((EEPROM_time-&#62;hours+1)%24)) && (RTC_time-&#62;min == 0)) // if we have step to the next hour
+  {
+    ticks = 1;
+  }
+  
+  EEPROM_time-&#62;hours = RTC_time-&#62;hour; // Temporary saving of the structure for next calculations
+  EEPROM_time-&#62;minutes = RTC_time-&#62;min;
+  
+  return ticks;
+}
+
+void do_impulse(my_clock_t* Clock)
+{
+  switch(Clock-&#62;polarity)
+  {
+    case NEGATIVE: // than switch to POSITIVE
+    {
+      digitalWrite(Clock-&#62;clock_pin_1, HIGH);
+      digitalWrite(Clock-&#62;clock_pin_2, LOW);
+      Clock-&#62;polarity = POSITIVE;
+    } break;
+    case POSITIVE: // than switch to NEGATIVE
+    {
+      digitalWrite(Clock-&#62;clock_pin_1, LOW);
+      digitalWrite(Clock-&#62;clock_pin_2, HIGH);
+      Clock-&#62;polarity = NEGATIVE;
+    } break;
+  }
+}
+
+void stop_clock(my_clock_t* Clock)
+{
+  digitalWrite(Clock-&#62;clock_pin_1, LOW);
+  digitalWrite(Clock-&#62;clock_pin_2, LOW);
+}
+
+					</code>
+					</pre>
+
+				<!-- Footer -->
+					<footer id="footer">
+						<div class="inner">
+							<section>
+								<h2>Kontakte</h2>
+								<ul class="icons">
+									<li><a href="https://www.linkedin.com/in/bohdan-ko/" class="icon brands style2 fa-linkedin"><span class="label">LinkedIn</span></a></li>
+									<!-- <li><a href="#" class="icon brands style2 fa-facebook-f"><span class="label">Facebook</span></a></li> -->
+									<li><a href="https://www.instagram.com/bohdan_ko1/" class="icon brands style2 fa-instagram"><span class="label">Instagram</span></a></li>
+									<li><a href="tel:+4915203957756" class="icon solid style2 fa-phone"><span class="label">Phone</span></a></li>
+									<li><a href="mailto:bohdankondratenko@gmail.com" class="icon solid style2 fa-envelope"><span class="label">Email</span></a></li>
+								</ul>
+							</section>
+							<ul class="copyright">
+								<li>&copy; Untitled. All rights reserved</li><li>Design: <a href="http://html5up.net">HTML5 UP</a></li>
+							</ul>
+						</div>
+					</footer>
+
+			</div>
+
+		<!-- Scripts -->
+			<script src="../../assets/js/jquery.min.js"></script>
+			<script src="../../assets/js/browser.min.js"></script>
+			<script src="../../assets/js/breakpoints.min.js"></script>
+			<script src="../../assets/js/util.js"></script>
+			<script src="../../assets/js/main.js"></script>
+			<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/prism.min.js"></script>
+
+	</body>
+</html>

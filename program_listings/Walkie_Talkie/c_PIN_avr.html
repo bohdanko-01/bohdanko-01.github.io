@@ -1,0 +1,284 @@
+﻿<!DOCTYPE HTML>
+<!--
+	Template Phantom by HTML5 UP
+	Downloaded from html5up.net | @ajlkn
+	Changed by Bohdan Kondratenko for Job Application Purposes
+-->
+<html>
+	<head>
+		<title>Pin_avr.c</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+		<link rel="stylesheet" href="../../assets/css/main.css" />
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/themes/prism.min.css"/>
+		<noscript><link rel="stylesheet" href="../../assets/css/noscript.css" /></noscript>
+	</head>
+
+	<body class="is-preload">
+
+		<button onclick="history.back()" id="arrow_back_outline" title="Back">
+			<span id="arrow_back"></span>
+		</button>
+
+		<button onclick="topFunction()" id="arrow_top_outline" title="Scroll up">
+			<span id="arrow_top"></span>
+		</button>
+
+		<!-- Wrapper -->
+			<div id="wrapper">
+
+				<!-- Header -->
+					<header id="header">
+						<div class="inner">
+
+							<!-- Logo -->
+								<a href="../../index.html" class="logo">
+									<span class="symbol"><img src="../../images/logo.svg" alt="" /></span><span class="title">Bohdan Kondratenko</span>
+								</a>
+
+						</div>
+					</header>
+
+				<!-- Main -->
+				<h2>main.c</h2>
+				<pre>
+					<code class="language-clike">
+/*
+ * Created: 30.01.2022
+ *  Author: Bohdan
+ */ 
+
+#include "PIN_avr.h"
+
+/* Setting working mode of a pin (input/output)
+ * The function might be not optimal. I couldn't find how to pass a port to a function properly
+ * Pins in INPUT mode are configured as WITH Pull UP. Write 0 to PORTx registers to set them to third state mode 
+ */
+void pin_mode(pin_t Pin, pin_mode_t mode)
+{
+	switch(Pin.port)
+	{
+		case _PA:
+		{
+			switch(mode)
+			{
+				case INPUT:
+				{
+				 
+				} break; // case INPUT
+				case OUTPUT:
+				{
+					
+				} break; // case OUTPUT
+			} // switch(mode)
+		} break; // case _PA
+		case _PB:
+		{
+			switch(mode)
+			{
+				case INPUT:
+				{
+					DDRB &= ~(1&#60;&#60;Pin.pin); // Writing "0" to a pin of DDRB. INPUT
+					PORTB |= (1&#60;&#60;Pin.pin); // Writing "1" to a pin of PORTB. Pull UP
+				} break; // case INPUT
+				case OUTPUT:
+				{
+					DDRB |= (1&#60;&#60;Pin.pin); // Writing "1" to a pin of DDRB. OUTPUT
+				} break; // case OUTPUT
+			} // switch(mode)
+		} break; // case _PB
+		case _PC:
+		{
+			switch(mode)
+			{
+				case INPUT:
+				{
+					DDRC &= ~(1&#60;&#60;Pin.pin);
+					PORTC |= (1&#60;&#60;Pin.pin); // Writing "1" to a pin of PORTB. Pull UP
+				} break; // case INPUT
+				case OUTPUT:
+				{
+					DDRC |= (1&#60;&#60;Pin.pin);
+				} break; // case OUTPUT
+			} // switch(mode)
+		} break; // case _PC
+		case _PD:
+		{
+			switch(mode)
+			{
+				case INPUT:
+				{
+					DDRD &= ~(1&#60;&#60;Pin.pin);
+					PORTD |= (1&#60;&#60;Pin.pin); // Writing "1" to a pin of PORTB. Pull UP
+				} break; // case INPUT
+				case OUTPUT:
+				{
+					DDRD |= (1&#60;&#60;Pin.pin);
+				} break; // case OUTPUT
+			} // switch(mode)
+		} break; // case _PD
+	} // switch(Pin.port)
+}
+
+/* Writing OUTPUTS
+ */
+void pin_write(pin_t Pin, my_bool state)
+{
+	switch(Pin.port)
+	{
+		case _PA:
+		{
+			switch(state)
+			{
+				case LOW:
+				{
+					
+				} break; // case INPUT
+				case HIGH:
+				{
+					
+				} break; // case OUTPUT
+			} // switch(mode)
+		} break; // case _PA
+		case _PB:
+		{
+			switch(state)
+			{
+				case LOW:
+				{
+					PORTB &= ~(1&#60;&#60;Pin.pin); // Writing "0" to a pin of DDRB. INPUT
+				} break; // case INPUT
+				case HIGH:
+				{
+					PORTB |= (1&#60;&#60;Pin.pin); // Writing "1" to a pin of DDRB. OUTPUT
+				} break; // case OUTPUT
+			} // switch(mode)
+		} break; // case _PB
+		case _PC:
+		{
+			switch(state)
+			{
+				case LOW:
+				{
+					PORTC &= ~(1&#60;&#60;Pin.pin);
+				} break; // case INPUT
+				case HIGH:
+				{
+					PORTC |= (1&#60;&#60;Pin.pin);
+				} break; // case OUTPUT
+			} // switch(mode)
+		} break; // case _PC
+		case _PD:
+		{
+			switch(state)
+			{
+				case LOW:
+				{
+					PORTD &= ~(1&#60;&#60;Pin.pin);
+				} break; // case INPUT
+				case HIGH:
+				{
+					PORTD |= (1&#60;&#60;Pin.pin);
+				} break; // case OUTPUT
+			} // switch(mode)
+		} break; // case _PD
+	} // switch(port)
+}
+
+/* Toggling OUTPUT
+*/
+void pin_toggle(pin_t Pin)
+{
+	switch(Pin.port)
+	{
+		case _PA:
+		{
+			
+		} break; // case _PA
+		case _PB:
+		{
+			PORTB ^= (1 &#60;&#60; Pin.pin);
+		} break; // case _PB
+		case _PC:
+		{
+			PORTC ^= (1 &#60;&#60; Pin.pin);
+		} break; // case _PC
+		case _PD:
+		{
+			PORTD ^= (1 &#60;&#60; Pin.pin);
+		} break; // case _PD
+	} // switch(port)
+}
+
+/* Reading INPUTS
+ */
+my_bool pin_read(pin_t Pin)
+{
+	switch(Pin.port)
+	{
+		case _PA:
+		{
+			return LOW;
+		} break; // case _PA
+		case _PB:
+		{
+			if((PINB & (1 &#60;&#60; Pin.pin)) == (1 &#60;&#60; Pin.pin))
+			{
+				return HIGH;
+			} else
+				return LOW;
+		} break; // case _PB
+		case _PC:
+		{
+			if((PINC & (1 &#60;&#60; Pin.pin)) == (1 &#60;&#60; Pin.pin))
+			{
+				return HIGH;
+			} else
+			return LOW;
+		} break; // case _PC
+		case _PD:
+		{
+			if((PIND & (1 &#60;&#60; Pin.pin)) == (1 &#60;&#60; Pin.pin))
+			{
+				return HIGH;
+			} else
+			return LOW;
+		} break; // case _PD
+	} // switch(port)
+	
+	return 0;		// Written to avoid compiler warnings
+}
+					</code>
+					</pre>
+
+				<!-- Footer -->
+					<footer id="footer">
+						<div class="inner">
+							<section>
+								<h2>Pin_avr.c</h2>
+								<ul class="icons">
+									<li><a href="https://www.linkedin.com/in/bohdan-ko/" class="icon brands style2 fa-linkedin"><span class="label">LinkedIn</span></a></li>
+									<!-- <li><a href="#" class="icon brands style2 fa-facebook-f"><span class="label">Facebook</span></a></li> -->
+									<li><a href="https://www.instagram.com/bohdan_ko1/" class="icon brands style2 fa-instagram"><span class="label">Instagram</span></a></li>
+									<li><a href="tel:+4915203957756" class="icon solid style2 fa-phone"><span class="label">Phone</span></a></li>
+									<li><a href="mailto:bohdankondratenko@gmail.com" class="icon solid style2 fa-envelope"><span class="label">Email</span></a></li>
+								</ul>
+							</section>
+							<ul class="copyright">
+								<li>&copy; Untitled. All rights reserved</li><li>Design: <a href="http://html5up.net">HTML5 UP</a></li>
+							</ul>
+						</div>
+					</footer>
+
+			</div>
+
+		<!-- Scripts -->
+			<script src="../../assets/js/jquery.min.js"></script>
+			<script src="../../assets/js/browser.min.js"></script>
+			<script src="../../assets/js/breakpoints.min.js"></script>
+			<script src="../../assets/js/util.js"></script>
+			<script src="../../assets/js/main.js"></script>
+			<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/prism.min.js"></script>
+
+	</body>
+</html>

@@ -1,0 +1,1452 @@
+﻿<!DOCTYPE HTML>
+<!--
+	Template Phantom by HTML5 UP
+	Downloaded from html5up.net | @ajlkn
+	Changed by Bohdan Kondratenko for Job Application Purposes
+-->
+<html>
+	<head>
+		<title>main.c</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+		<link rel="stylesheet" href="../../assets/css/main.css" />
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/themes/prism.min.css"/>
+		<noscript><link rel="stylesheet" href="../../assets/css/noscript.css" /></noscript>
+	</head>
+
+	<body class="is-preload">
+
+		<button onclick="history.back()" id="arrow_back_outline" title="Back">
+			<span id="arrow_back"></span>
+		</button>
+
+		<button onclick="topFunction()" id="arrow_top_outline" title="Scroll up">
+			<span id="arrow_top"></span>
+		</button>
+
+		<!-- Wrapper -->
+			<div id="wrapper">
+
+				<!-- Header -->
+					<header id="header">
+						<div class="inner">
+
+							<!-- Logo -->
+								<a href="../../index.html" class="logo">
+									<span class="symbol"><img src="../../images/logo.svg" alt="" /></span><span class="title">Bohdan Kondratenko</span>
+								</a>
+
+						</div>
+					</header>
+
+				<!-- Main -->
+				<h2>main.c</h2>
+				<pre>
+					<code class="language-clike">
+/* Includes ------------------------------------------------------------------*/
+#include "main.h"
+#include "stm32f4xx_hal.h"
+#include "cmsis_os.h"
+#include "adc.h"
+#include "can.h"
+#include "dma.h"
+#include "spi.h"
+#include "tim.h"
+#include "usart.h"
+#include "gpio.h"
+
+/* USER CODE BEGIN Includes */
+#include &#60;stdbool.h&#62;
+#include &#60;stdlib.h&#62;
+#include &#60;stdio.h&#62;
+#include &#60;string.h&#62;
+#include "semphr.h"
+#include "My_types.h"
+#include "PIN_functions.h"
+#include "MATH_functions.h"
+#include "MTRX_functions.h"
+#include "SPI_functions.h"
+#include "FLASH_functions.h"
+#include "ETHCAT_functions.h"
+#include "CANopen.h"
+
+/* USER CODE END Includes */
+
+/* Private variables ---------------------------------------------------------*/
+
+/* USER CODE BEGIN PV */
+/* Private variables ---------------------------------------------------------*/
+
+xQueueHandle PWM_Val_queue;
+xQueueHandle Temp_queue;
+xQueueHandle Fault_queue;
+xQueueHandle SKZ_queue;
+xQueueHandle Lin_In_queue;
+xQueueHandle Dig_In_queue;
+xQueueHandle Dig_Out_queue;
+xQueueHandle UART_PWM_queue;
+xQueueHandle Temp2_queue;
+xQueueHandle SKZ2_queue;
+
+xSemaphoreHandle Semaphore_PWM;					// Semaphore for synchronization  of measurements and normal PWM
+
+extern volatile uint16_t tim_9_pw_rate_chan1;   // PWM rate of program timer PWM1
+extern volatile uint16_t tim_9_pw_rate_chan2;   // PWM rate of program timer PWM2
+extern volatile uint16_t tim_9_period;			// Period of program timer
+extern Work_state_t Measure_1, Measure_2;		// State of channels PWM1 and PWM2 (program timer) - normal work or measurement
+volatile uint16_t counter = 0;					// Counter for program timer
+volatile uint8_t mode = 0;					 	// Direction of program counter counting (0 = UP, 1 = DOWN)
+UART_param_str xUART;  							// Structure for UART work
+CAN_flag_str xCAN;     							// Structure with flags to proceed CAN interrupts
+
+volatile uint16_t Vref_VAL = 0;					// ADC reference voltage (readed every current measurement cycle)
+
+TaskHandle_t PWM_task_handle;					// "Pointer" to PWM_Set_task
+TaskHandle_t renew_PWM_handle;					// "Pointer" to Receive_PWM_PDO_task
+
+CAN_TxHeaderTypeDef txHeader_TEMP;				// Settings structure for CAN temperature (and dig in) transmit
+CAN_TxHeaderTypeDef txHeader_CURR;				// Settings structure for CAN current transmit
+CAN_TxHeaderTypeDef txHeader_LININ;				// Settings structure for CAN linear inputs transmit
+CAN_TxHeaderTypeDef txHeader_SDO;
+CAN_RxHeaderTypeDef recHeader;				// Settings structure for CAN PWM receive
+CAN_RxHeaderTypeDef recHeader_SDO;
+uint8_t recData_raw[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+uint8_t recDataPWM[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+uint8_t recDataSDO[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+uint8_t Flash_flag = 0;
+//uint8_t recData_raw[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+
+Settings_str Flash_SETTINGS;
+
+/* USER CODE END PV */
+
+/* Private function prototypes -----------------------------------------------*/
+void SystemClock_Config(void);
+void MX_FREERTOS_Init(void);
+
+/* USER CODE BEGIN PFP */
+/* Private function prototypes -----------------------------------------------*/
+
+static void Curr_sens_task (void* pvParameters);
+static void FLASH_operations (void* pvParameters);
+static void Temp_sens_task (void* pvParameters);
+static void Lin_IN_task (void* pvParameters);
+static void DIG_IN_task (void* pvParameters);
+static void DIG_OUT_task (void* pvParameters);
+static void UART_Debug_task (void* pvParameters);
+static void ETHCAT_task (void* pvParameters);
+static void PWM_Set_task (void* pvParameters);
+static void Temp_SEND_CAN_task (void* pvParameters);
+static void Receive_PWM_CAN_task (void* pvParameters);
+static void Curr_SEND_CAN_task (void* pvParameters);
+static void LinIN_SEND_CAN_task (void* pvParameters);
+static void Receive_SDO_CAN_task (void* pvParameters);
+void CO_TIMER_ISR(void);
+
+/* USER CODE END PFP */
+
+/* USER CODE BEGIN 0 */
+
+/* USER CODE END 0 */
+
+/**
+  * @brief  The application entry point.
+  *
+  * @retval None
+  */
+int main(void)
+{
+  /* USER CODE BEGIN 1 */
+
+  /* USER CODE END 1 */
+
+  /* MCU Configuration----------------------------------------------------------*/
+
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  HAL_Init();
+
+  /* USER CODE BEGIN Init */
+
+  /* USER CODE END Init */
+
+  /* Configure the system clock */
+  SystemClock_Config();
+
+  /* USER CODE BEGIN SysInit */
+
+  /* USER CODE END SysInit */
+
+  /* Initialize all configured peripherals */
+  MX_GPIO_Init();
+  MX_DMA_Init();
+  MX_ADC1_Init();
+  MX_ADC2_Init();
+  MX_ADC3_Init();
+  MX_SPI1_Init();
+  MX_SPI3_Init();
+  MX_TIM1_Init();
+  MX_TIM3_Init();
+  MX_TIM4_Init();
+  MX_TIM5_Init();
+  MX_TIM8_Init();
+  MX_USART3_UART_Init();
+  MX_TIM2_Init();
+  MX_SPI2_Init();
+  MX_TIM9_Init();
+  MX_CAN2_Init();
+  /* USER CODE BEGIN 2 */
+
+  All_timers_start(); // !!!1 let the party begin
+
+  Lock_PINs(); // To prevent pins unexpected usage
+  HAL_UART_Receive_IT(&huart3, xUART.chan_numb, 1);
+  vTraceEnable(TRC_START);
+  vSemaphoreCreateBinary(Semaphore_PWM);
+
+	/******** Queues Creation ********/
+	PWM_Val_queue = xQueueCreate(2, sizeof(uint16_t)*CHAN_QUANTITY); // Receive_PWM_PDO_task (or UART_Debug_task) -&#62; PWM_Set_task
+	if (PWM_Val_queue == NULL)
+	{while (1);}
+	Temp_queue = xQueueCreate(1, sizeof(uint32_t)*CHAN_QUANTITY); // Temp_sens_task -&#62; UART_Debug_task
+	if (Temp_queue == NULL)
+	{while (1);}
+	SKZ_queue = xQueueCreate(1, sizeof(float)*CHAN_QUANTITY); // Curr_sens_task -&#62; UART_Debug_task
+	if (SKZ_queue == NULL)
+	{while (1);}
+	Lin_In_queue = xQueueCreate(1, sizeof(uint16_t)*3); // Lin_IN_task -&#62; Send_OUTSIDE (??)
+	if (Lin_In_queue == NULL)
+	{while (1);}
+	Dig_In_queue = xQueueCreate(1, sizeof(uint8_t));// Dig_IN_task -&#62; Temp_SEND_CAN_task
+	if (Dig_In_queue == NULL)
+	{while (1);}
+	Dig_Out_queue = xQueueCreate(1, sizeof(uint8_t));// Receive_PWM_PDO_task -&#62; Dig_OUT_task
+	if (Dig_Out_queue == NULL)
+	{while (1);}
+	Fault_queue = xQueueCreate(1, sizeof(uint8_t) * CHAN_QUANTITY);  // Temp_sens_task -&#62; UART_Debug_task
+	if (Fault_queue == NULL)
+	{while (1);}
+	UART_PWM_queue = xQueueCreate(1, sizeof(uint16_t) * CHAN_QUANTITY);  // UART_Debug_task -&#62; PWM_Set_task
+	if (UART_PWM_queue == NULL)
+	{while (1);}
+	Temp2_queue = xQueueCreate(1, sizeof(uint16_t) * CHAN_QUANTITY);  // Temp_sens_task -&#62; Temp_SEND_CAN_task
+	if (Temp2_queue == NULL)
+	{while (1);}
+	SKZ2_queue = xQueueCreate(1, sizeof(uint16_t) * CHAN_QUANTITY);  // Curr_sens_task -&#62; Curr_SEND_CAN_task
+	if (SKZ2_queue == NULL)
+	{while (1);}
+
+	/******** Tasks Creation ********/
+	if (xTaskCreate(Curr_sens_task, (char*) "Curr Sens Poll", configMINIMAL_STACK_SIZE * 30, NULL, 2, NULL) == pdFALSE)
+	{while (1);}
+	if (xTaskCreate(PWM_Set_task, (char*) "Setting PWM rate", configMINIMAL_STACK_SIZE * 3, NULL, 2, &PWM_task_handle) == pdFALSE)
+	{while (1);}
+	if (xTaskCreate(FLASH_operations, (char*) "Change settings", configMINIMAL_STACK_SIZE*20, NULL, 3, NULL) == pdFALSE)
+	{while (1);}
+	if (xTaskCreate(Temp_sens_task, (char*) "Temp Sens Poll", configMINIMAL_STACK_SIZE*10, NULL, 1, NULL) == pdFALSE)
+	{while (1);}
+	if (xTaskCreate(Lin_IN_task, (char*) "Lin In task", configMINIMAL_STACK_SIZE*2, NULL, 1, NULL) == pdFALSE)
+	{while (1);}
+	if (xTaskCreate(DIG_IN_task, (char*) "Dig In Task", configMINIMAL_STACK_SIZE*4, NULL, 1, NULL) == pdFALSE)
+	{while (1);}
+	if (xTaskCreate(DIG_OUT_task, (char*) "Dig Out Task", configMINIMAL_STACK_SIZE*4, NULL, 1, NULL) == pdFALSE)
+	{while (1);}
+	if (xTaskCreate(UART_Debug_task, (char*) "UART debug", configMINIMAL_STACK_SIZE*10, NULL, 1, NULL) == pdFALSE)
+	{while (1);}
+	if (xTaskCreate(ETHCAT_task, (char*) "EtherCAT", configMINIMAL_STACK_SIZE*60, NULL, 1, NULL) == pdFALSE)
+	{while (1);}
+	if (xTaskCreate(Temp_SEND_CAN_task, (char*) "Send temperature", configMINIMAL_STACK_SIZE*10, NULL, 1, NULL) == pdFALSE)
+	{while (1);}
+	if (xTaskCreate(Receive_PWM_CAN_task, (char*) "Receive new PWM", configMINIMAL_STACK_SIZE*5, NULL, 1, &renew_PWM_handle)== pdFALSE)
+	{while (1);}
+	if (xTaskCreate(Curr_SEND_CAN_task, (char*) "Send current", configMINIMAL_STACK_SIZE*5, NULL, 1, &renew_PWM_handle)== pdFALSE)
+	{while (1);}
+	if (xTaskCreate(LinIN_SEND_CAN_task, (char*) "Send lin in states", configMINIMAL_STACK_SIZE*5, NULL, 1, &renew_PWM_handle)== pdFALSE)
+	{while (1);}
+	if (xTaskCreate(Receive_SDO_CAN_task, (char*) "Rec of SDO data", configMINIMAL_STACK_SIZE*5, NULL, 1, &renew_PWM_handle)== pdFALSE)
+	{while (1);}
+
+  /* USER CODE END 2 */
+
+  /* Call init function for freertos objects (in freertos.c) */
+  MX_FREERTOS_Init();
+
+  /* Start scheduler */
+  osKernelStart();
+  
+  /* We should never get here as control is now taken by the scheduler */
+
+  /* Infinite loop */
+  /* USER CODE BEGIN WHILE */
+  while (1)
+  {
+  /* USER CODE END WHILE */
+
+  /* USER CODE BEGIN 3 */
+
+  }
+  /* USER CODE END 3 */
+
+}
+
+/**
+  * @brief System Clock Configuration
+  * @retval None
+  */
+void SystemClock_Config(void)
+{
+
+  RCC_OscInitTypeDef RCC_OscInitStruct;
+  RCC_ClkInitTypeDef RCC_ClkInitStruct;
+
+    /**Configure the main internal regulator output voltage 
+    */
+  __HAL_RCC_PWR_CLK_ENABLE();
+
+  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
+
+    /**Initializes the CPU, AHB and APB busses clocks 
+    */
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+  RCC_OscInitStruct.PLL.PLLM = 6;
+  RCC_OscInitStruct.PLL.PLLN = 168;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
+  RCC_OscInitStruct.PLL.PLLQ = 7;
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
+
+    /**Initializes the CPU, AHB and APB busses clocks 
+    */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2;
+
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_5) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
+
+    /**Configure the Systick interrupt time 
+    */
+  HAL_SYSTICK_Config(HAL_RCC_GetHCLKFreq()/1000);
+
+    /**Configure the Systick 
+    */
+  HAL_SYSTICK_CLKSourceConfig(SYSTICK_CLKSOURCE_HCLK);
+
+  /* SysTick_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(SysTick_IRQn, 15, 0);
+}
+
+/* USER CODE BEGIN 4 */
+
+/*************** SENSORS POLLING TASKS **************/
+static void Curr_sens_task (void* pvParameters)
+{
+	TickType_t Prew_wake;
+
+	heat_el_t h_el_was_ON[9] = // list of elements that was ON at current cycle of measurements
+	{ HEL_NO, HEL_NO, HEL_NO, HEL_NO, HEL_NO,
+			HEL_NO, HEL_NO, HEL_NO, HEL_NO };
+
+	SW_state_t resol_of_meas[CHAN_QUANTITY];  // states of switches for current resolution
+	for(uint8_t i = 0; i &#60; CHAN_QUANTITY; i++)
+		resol_of_meas[i] = LOW;
+
+	// LOW = rough measurement of BIG current
+	uint16_t ADC1_raw[CUR_RAW_ARR_LENGTH*NUMB_CHAN_PER_ADC1] = {0};   // Raw data from ADC1
+	uint16_t ADC3_raw[CUR_RAW_ARR_LENGTH*NUMB_CHAN_PER_ADC3] = {0};         // Raw data from ADC3
+
+	int16_t ADC_sorted[CHAN_QUANTITY][CUR_RAW_ARR_LENGTH] = {0};
+	int16_t ADC_proceeded[CHAN_QUANTITY][CUR_PROC_ARR_LENGTH] = {0};
+
+	uint16_t* raw_ptr;
+	uint8_t hop_size = 0;
+
+	uint8_t Channel_decoder[9] = {0x10, 0x00, 0x01, 0x02, 0x03, 0x11, 0x04, 0x05, 0x12};
+
+	/* 	ADC1	ADC3
+	 ******************
+	 * 	СUR2	CUR1
+	 *	CUR3	CUR6
+	 *	CUR4	CUR9
+	 *	CUR5
+	 *	CUR7
+	 *	CUR8
+	 */
+
+	int32_t Aver = 0;
+
+	uint8_t start_point_mark = 0; 	// counter for start point search (proceeding of collected data)
+	uint8_t filling_counter = 0; 	// counter for filling the arrays (proceeding of collected data)
+	uint8_t cycles_counter = 0; 	// counter of cycles of while(1) for sending data of RMS
+
+	float Res_SKZ[CHAN_QUANTITY] = {0};
+	uint16_t Res_SKZ2[CHAN_QUANTITY] = {0};
+
+	uint8_t Chan_ON_OFF_mask[CHAN_QUANTITY]; //  !!!!!!!!!!!!!!!!!!!!!!!!
+	for(uint8_t i = 0; i &#60; CHAN_QUANTITY; i++)
+		Chan_ON_OFF_mask[i] = 1;
+
+	while(1)
+	{
+		Prew_wake = xTaskGetTickCount();
+
+		HAL_GPIO_TogglePin(My_LED_GPIO_Port, My_LED_Pin); // LED toggle to show system is alive
+
+		// BLOCK THE PWM TASK
+		vTaskSuspend(PWM_task_handle);
+
+		// Switch of all the heating elements. Ones that are on - at maximum PWM
+		switch_heat_elems(&Flash_SETTINGS, h_el_was_ON, sizeof(h_el_was_ON)/sizeof(heat_el_t), Chan_ON_OFF_mask);
+
+		// Start measuring of current on the sensors
+
+		// ADC mode - "Scan"
+		for (uint8_t i = 0; i &#60; CUR_RAW_ARR_LENGTH; i++)  // Number of counts - 31 times. Once per ms
+		{
+			HAL_ADC_Start_DMA(&hadc1, (uint32_t*)ADC1_raw, sizeof(ADC1_raw)/sizeof(uint16_t));
+			HAL_ADC_Start_DMA(&hadc3, (uint32_t*)ADC3_raw, sizeof(ADC3_raw)/sizeof(uint16_t));
+			vTaskDelayUntil(&Prew_wake, 1);
+		}
+		// Measurement is complete
+		heat_el_resume_PWM();//h_el_enum);
+
+		// UNLOCK THE PWM TASK
+		xSemaphoreGive(Semaphore_PWM);
+		vTaskResume(PWM_task_handle);
+
+		/********* SORTING OF RAW ADC DATA *********/
+		for(Stromwand_t i = SW1; i &#60;=SW9; i++)
+		{
+			for(uint8_t j = 0; j &#60; 9; j++)
+			{
+				if(h_el_was_ON[j] != HEL_NO)
+				if(Flash_SETTINGS.Mask_matr[i][h_el_was_ON[j]] == 1) // if there is "1" in mask matrix
+				{
+					if((Channel_decoder[i] & 0x10) &#62; 0) //
+					{
+						raw_ptr = ADC3_raw;
+						hop_size = 3;
+					}
+					else
+					{
+						raw_ptr = ADC1_raw;
+						hop_size = 6;
+					}
+					for(uint8_t a = 0; a&#60;31; a++)
+					{
+						ADC_sorted[h_el_was_ON[j]][a] = raw_ptr[(Channel_decoder[i]&0x0F)+ a*hop_size];
+					}
+				}
+			}
+		}
+
+		/********* PROCEEDING (FILTERING) OF SORTED ADC DATA *********/
+		for (uint8_t i = 0; i &#60; 9; i++) // moving on raws of sorted array
+		{
+			Aver = 0;
+			start_point_mark = 1;
+			filling_counter = 0;
+			if (h_el_was_ON[i] != HEL_NO)
+			{
+				for (uint8_t j = 1; j &#60;= 15; j++)
+				{
+					if (abs(ADC_sorted[h_el_was_ON[i]][j] - ADC_sorted[h_el_was_ON[i]][j - 1]) &#60; ADC_CURR_DIFFER)
+					{
+						start_point_mark++; // find first element, for start of sinus
+						start_point_mark &= 0xF;
+					}
+					else
+						break;
+				}
+				while (filling_counter &#60; CUR_PROC_ARR_LENGTH)
+				{
+					ADC_proceeded[h_el_was_ON[i]][filling_counter] = ADC_sorted[h_el_was_ON[i]][start_point_mark + filling_counter]; // fill the array of proceeded data
+					Aver += ADC_proceeded[h_el_was_ON[i]][filling_counter];
+					filling_counter++;
+				}
+				Aver /= CUR_PROC_ARR_LENGTH;
+				uint8_t k = 0;
+				while (k &#60; CUR_PROC_ARR_LENGTH)
+				{
+					ADC_proceeded[h_el_was_ON[i]][k] -= Aver;
+					k++;
+				}
+			}
+		}
+
+		/******  MEASURE THE REF ADC VOLTAGE ******/
+
+		HAL_ADCEx_InjectedStart(&hadc1);
+		if(HAL_ADCEx_InjectedPollForConversion(&hadc1, 2) == HAL_OK)
+		{
+			Vref_VAL = HAL_ADCEx_InjectedGetValue(&hadc1, ADC_INJECTED_RANK_1);
+			HAL_ADCEx_InjectedStop(&hadc1);
+		}
+
+		/******* CALCULATION OF THE RMS *******/
+
+		for(uint8_t i = 0; i &#60; 9; i++)
+		{
+			if (h_el_was_ON[i] != HEL_NO)
+				Res_SKZ[h_el_was_ON[i]] = calc_SKZ(ADC_proceeded[h_el_was_ON[i]], CUR_PROC_ARR_LENGTH, Vref_VAL, resol_of_meas[h_el_was_ON[i]]);
+			else
+				Res_SKZ[h_el_was_ON[i]] = 0;
+		}
+
+		for(uint8_t i = 0; i &#60; 9; i++)
+		{
+			Res_SKZ2[h_el_was_ON[i]] = (uint16_t)(Res_SKZ[h_el_was_ON[i]]*10);
+		}
+
+		cycles_counter ++;
+
+		// Transfer of an array with RMS (every 3 cycles)
+		if(cycles_counter &#62;= 3)
+		{
+			cur_set_resolution(Res_SKZ, resol_of_meas);
+			xQueueSend(SKZ_queue, (void*)Res_SKZ, 10); // The collected data is transfered to the queue
+			xQueueSend(SKZ2_queue, (void*)Res_SKZ2, 10);
+			cycles_counter = 0;
+		}
+
+		vTaskDelay(Flash_SETTINGS.CS_per);
+	}
+	vTaskDelete(NULL);
+}
+/****************************************************/
+static void Temp_sens_task (void* pvParameters)
+{
+	/* Polling of temperature sensors. Using SPI. */
+
+	uint8_t Cont_Reg_0 = 0b10110001;
+	uint8_t Cont_Reg_1 = 0b00100000;
+
+	uint32_t Temperatures[CHAN_QUANTITY]; // Array where temperature will be stored
+	uint8_t fault_reg[CHAN_QUANTITY]; 	   // Array for storing the content of fault registers from temp sens ICs
+
+	volatile int16_t Temper_12bit[CHAN_QUANTITY];
+
+	Set_sensors(Cont_Reg_0, Cont_Reg_1, Flash_SETTINGS.Termoc_types);
+	vTaskDelay(5);
+
+	while(1)
+	{
+		get_temp_value(Temperatures);
+		get_fault_regs(fault_reg);
+
+		for(uint8_t i = 0; i &#60; sizeof(Temperatures)/sizeof(uint32_t); i++)
+		{
+			Temper_12bit[i] = (int16_t)((float)Temperatures[i]/4096.0)*4095/(Flash_SETTINGS.Max_temp - Flash_SETTINGS.Min_temp);
+			if(fault_reg[i] == 65) 		// Correcting of measured results. When there is no termocouple.
+				Temper_12bit[i] = 14045;
+		}
+
+		xQueueSend(Temp_queue, (void*) Temperatures, 10);
+		xQueueSend(Temp2_queue, (void*) Temper_12bit, 10);
+		xQueueSend(Fault_queue, (void*) fault_reg, 10);
+
+		vTaskDelay(Flash_SETTINGS.TS_per);
+	}
+	vTaskDelete(NULL);
+}
+
+/*************** INPUTS POLLING TASKS ***************/
+static void Lin_IN_task (void* pvParameters)
+{
+	/* Polling of linear inputs
+	 * ADC2(channels 10, 14, 15)
+	 */
+
+	uint16_t Lin_In_Data[3] = {0};
+	volatile uint16_t Lin_In_Data_send[3] = {0};
+
+	while(1)
+	{
+		HAL_ADC_Start_DMA(&hadc2, (uint32_t*)Lin_In_Data, 3);
+
+		for(int8_t i = -1; i &#60; 3; i++) // why start from "-1" ? I don`t know, but only now it works.
+		{
+			Lin_In_Data_send[i] = (uint16_t)((uint32_t)Lin_In_Data[i]*(uint32_t)1000/(uint32_t)4095); //
+		}
+		xQueueSend(Lin_In_queue, (void*) Lin_In_Data_send, 10);
+		vTaskDelay(Flash_SETTINGS.Lin_In_per);
+	}
+	vTaskDelete(NULL);
+}
+/****************************************************/
+static void DIG_IN_task (void* pvParameters)
+{
+	/* Polling of digital inputs*/
+
+	uint8_t Dig_In_Val = 0; // Recording of data from all inputs to one variable
+
+	while(1)
+	{
+		Dig_In_Val = Get_Dig_In_States();
+
+		xQueueSend(Dig_In_queue, (void*) &Dig_In_Val, 10);
+		vTaskDelay(500);
+	}
+	vTaskDelete(NULL);
+}
+
+/*************** OUTPUT SIGNALS TASKS ***************/
+static void PWM_Set_task (void* pvParameters)
+{
+	BaseType_t Sucsess_sem, Sucsess_queue;
+	uint16_t PWM_mtrx[CHAN_QUANTITY];
+	for(uint8_t i = 0; i &#60; CHAN_QUANTITY; i++)  // All PWM = 0
+		PWM_mtrx[i] = 0;
+	uint8_t Chan_ON_OFF_mask[CHAN_QUANTITY];
+	for(uint8_t i = 0; i &#60; sizeof(Chan_ON_OFF_mask); i++)  // !!!! should be changed to commands from main syst
+		Chan_ON_OFF_mask[i] = 1;
+	heat_elem_set_PERIOD(Flash_SETTINGS.PWM_per); //!!!!!!!1
+
+	while(1)
+	{
+		//Sucsess_queue = xQueueReceive(UART_PWM_queue, &(PWM_mtrx), 10);   // Debuging line (if uncommented - comment lower line)
+		Sucsess_queue = xQueueReceive(PWM_Val_queue, &(PWM_mtrx), 10);
+		Sucsess_sem = xSemaphoreTake(Semaphore_PWM, 0);
+		if(Sucsess_sem == pdTRUE || Sucsess_queue == pdTRUE)
+			heat_elems_all_ON(PWM_mtrx, Chan_ON_OFF_mask);   // All heating elements on, according to the matrix of states
+	}
+	vTaskDelete(NULL);
+}
+/****************************************************/
+static void DIG_OUT_task(void* pvParameters)
+{
+	/* Initialasing of digital outputs according to data received from main system */
+
+	uint8_t Dig_Out_states;
+
+	while (1)
+	{
+		xQueueReceive(Dig_Out_queue, &(Dig_Out_states), 5); // format of the received data: ХХbb bbbb
+
+		Gig_Out_On(Dig_Out_states);
+		vTaskDelay(500);
+	}
+	vTaskDelete(NULL);
+}
+
+/*************** FLASH MEMORY TASK ***************/
+static void FLASH_operations (void* pvParameters)
+{
+	/* Task for receiving commands from main system and rewriting flash if necessary */
+
+	 Read_FLASH(&Flash_SETTINGS, sizeof(Flash_SETTINGS));
+	 Init_RAM(&Flash_SETTINGS, Get_CAN_addr());
+	 Write_FLASH(PARAMS_START_MEM_ADR, &Flash_SETTINGS, sizeof(Flash_SETTINGS));
+
+	while(1)
+	{
+		if (Flash_flag == 1)
+		{
+			Write_FLASH(PARAMS_START_MEM_ADR, &Flash_SETTINGS, sizeof(Flash_SETTINGS));
+			Flash_flag = 0;
+		}
+		vTaskDelay(500);
+	}
+	vTaskDelete(NULL);
+}
+
+/*************** UART INTERFACE TASKS ***************/
+static void UART_Debug_task (void* pvParameters)
+{
+	/* I will not comment this &#62;:[ */
+
+	uint32_t Temperatures[CHAN_QUANTITY];
+	uint8_t Fault_regs[CHAN_QUANTITY];
+
+	uint16_t PWM_mtrx[CHAN_QUANTITY];
+	for(uint8_t i = 0; i &#60; CHAN_QUANTITY; i++)
+		PWM_mtrx[i] = 0;
+	float SKZ[CHAN_QUANTITY] = {0};
+	char str_temp[10];
+	char str_i[20];
+	char str_fault[19];
+	char str_curr[10];
+	char str_vref[15];
+	uint8_t str_set_PWM[] = "Enter PWM Value:\n";
+	uint8_t str_ERROR[] = "Error in command!!!\n";
+
+	char enter[] = " \n";
+
+	while(1)
+	{
+		xQueueReceive(Temp_queue, &(Temperatures), 10);
+		xQueueReceive(Fault_queue, &(Fault_regs), 10);
+		xQueueReceive(SKZ_queue, &(SKZ), 10);
+
+		uint8_t i = PWM9;
+		int8_t a = 0;
+		sprintf(str_i, "Chan numb: %d", (i+1));
+		sprintf( str_temp, " %.2f", (float)Temperatures[i]/4096.0);
+
+		sprintf(str_fault, " Fault reg %d = %X", (i+1), Fault_regs[i]);
+
+		sprintf(str_vref, "Vref = %d\n", (int)Vref_VAL);
+		if(xUART.chan_rec_compl == 0)
+		{
+			HAL_UART_Transmit(&huart3, (uint8_t*)str_i, 13, 0xFFFF);
+			while(str_temp[a] != 0)
+			{
+				HAL_UART_Transmit(&huart3, (uint8_t*)(str_temp+a), 1, 0xFFFF);
+				a++;
+			}
+			HAL_UART_Transmit(&huart3, (uint8_t*) str_fault, 19, 0xFFFF);
+			HAL_UART_Transmit(&huart3, (uint8_t*) enter, sizeof(enter), 0xFFFF);
+
+			a=0;
+			sprintf(str_i, "Current = ");
+			sprintf(str_curr, "%.2f \n", (float)SKZ[i]);
+			HAL_UART_Transmit(&huart3, (uint8_t*)str_i, 10, 0xFFFF);
+			while(str_curr[a] != 0)
+			{
+				HAL_UART_Transmit(&huart3, (uint8_t*)str_curr+a, 1, 0xFFFF);
+				a++;
+			}
+			a = 0;
+			while(str_vref[a] != 0)
+			{
+				HAL_UART_Transmit(&huart3, (uint8_t*)str_vref+a, 1, 0xFFFF);
+				a++;
+			}
+		}
+
+		if(xUART.chan_rec_compl == 1 && xUART.PWM_rec_compl == 0)
+		{
+			if(atoi((char*)xUART.chan_numb) &#62; 0 && atoi((char*)xUART.chan_numb) &#60; 25)
+			{
+				HAL_UART_Transmit(&huart3, str_set_PWM, sizeof(str_set_PWM), 0xFFFF);
+			}
+			else
+				HAL_UART_Transmit(&huart3, str_ERROR, sizeof(str_ERROR), 0xFFFF);
+		}
+
+		if(xUART.chan_rec_compl == 1 && xUART.PWM_rec_compl == 1)
+		{
+			if(atoi((char*)xUART.PWM_val) &#62;= 0 && atoi((char*)xUART.PWM_val) &#60;= 5000) // !!!1 поменял границу
+			{
+				Flash_SETTINGS.CS_per = (uint16_t)atoi((char*)xUART.PWM_val);
+				xCAN.SDO_flag = 1;
+				//PWM_mtrx[atoi((char*)xUART.chan_numb)-1] = atoi((char*)xUART.PWM_val);
+			}
+			else
+				HAL_UART_Transmit(&huart3, str_ERROR, sizeof(str_ERROR), 0xFFFF);
+			xUART.chan_rec_compl = 0;
+			xUART.PWM_rec_compl = 0;
+			vTaskResume(PWM_task_handle);
+			xQueueSend(UART_PWM_queue, (void*)PWM_mtrx, 10);
+		}
+		vTaskDelay(1000);
+	}
+	vTaskDelete(NULL);
+}
+
+/*************** CAN INTERFACE TASKS ****************/
+static void Curr_SEND_CAN_task (void* pvParameters)
+{
+	HAL_StatusTypeDef Ok_or_not;
+	uint8_t Dev_addr = 0;
+
+	uint8_t zone = 0;
+	uint32_t mailbox;
+
+	Current_str Current_packet;
+	uint16_t Cur_val[CHAN_QUANTITY] = {0};
+	uint8_t txData[3] = {0};
+	uint8_t* ptr;
+
+	ptr = (uint8_t*)&Current_packet;
+	for(uint8_t i = 0; i &#60; sizeof(Current_packet); i++)
+	{
+		ptr[i] = 0;
+	}
+
+	Dev_addr = Get_CAN_addr();
+
+	TX_Header_init(&txHeader_CURR ,Dev_addr, 0x180 &#62;&#62; 7, 3);
+
+	while(1)
+	{
+		xQueueReceive(SKZ2_queue, (void* )Cur_val, 0);
+
+		Current_packet.Zone_numb = zone;
+		Current_packet.Current = (uint16_t)Cur_val[zone];
+
+		memcpy(txData, &Current_packet, sizeof(Current_packet));
+
+		txData[1] = 0x0F & txData[1];
+
+		if (Flash_SETTINGS.Transm_allowed == 1)
+		{
+			Ok_or_not = HAL_CAN_AddTxMessage(&hcan2, &txHeader_CURR, txData, &mailbox);
+			if (Ok_or_not != HAL_OK)
+			{
+				while (1);
+			}
+		}
+
+		zone++;
+		if (zone &#62; CHAN_QUANTITY-1)
+		{
+			zone = 0;
+		}
+
+		HAL_Delay(Flash_SETTINGS.CS_per);
+	}
+}
+/****************************************************/
+static void Temp_SEND_CAN_task (void* pvParameters)
+{
+	uint16_t Temp[CHAN_QUANTITY] = {0};
+	HAL_StatusTypeDef Ok_or_not;
+	uint8_t txData[8] = {0};
+
+	uint32_t mailbox;
+	uint8_t Dev_addr;
+	uint8_t DigIn = 0;
+	uint8_t zone = 0; // Number of Zone (0-7)
+
+	Temp_str Tempr_paket_str;
+
+	Dev_addr = Get_CAN_addr();
+
+	filter_init(Dev_addr);
+	HAL_CAN_Start(&hcan2);
+	HAL_CAN_ActivateNotification(&hcan2, CAN_IT_RX_FIFO0_MSG_PENDING);
+	TX_Header_init(&txHeader_TEMP, Dev_addr, 0x280&#62;&#62;7, 8);
+
+	while(1)
+	{
+		xQueueReceive(Temp2_queue, (void* )Temp, 0);  // Get (renew) the array with temperature
+		xQueueReceive(Dig_In_queue, (void*)&DigIn, 0);
+
+		Tempr_paket_str.Dig_IN = DigIn;
+		Tempr_paket_str.Zone_numb = zone;
+		Tempr_paket_str.Temperature[0] = Temp[zone];
+		Tempr_paket_str.Temperature[1] = Temp[zone+8];
+		Tempr_paket_str.Temperature[2] = Temp[zone+16];
+
+		memcpy(txData, &Tempr_paket_str, sizeof(Tempr_paket_str));
+		uint8_t bubble;
+		for(uint8_t i = 2; i &#60; sizeof(Tempr_paket_str)-1; i+=2)
+		{
+			bubble = txData[i];
+			txData[i] = txData[i+1];
+			txData[i+1] = bubble;
+		}
+
+		if (Flash_SETTINGS.Transm_allowed == 1)
+		{
+			Ok_or_not = HAL_CAN_AddTxMessage(&hcan2, &txHeader_TEMP, txData, &mailbox);
+			if(Ok_or_not != HAL_OK)
+			{
+				while(1);
+			}
+		}
+
+	    zone++;
+	    if(zone &#62; 7)
+	    {
+	    	zone = 0;
+	    }
+		HAL_Delay(80);
+	}
+}
+/****************************************************/
+static void LinIN_SEND_CAN_task (void* pvParameters)
+{
+	uint16_t Lin_in_data[3] = {0};
+	uint16_t Lin_in_packet[4] = {0};
+
+	HAL_StatusTypeDef Ok_or_not;
+	uint8_t Dev_addr = 0;
+	uint32_t mailbox;
+
+	Dev_addr = Get_CAN_addr();
+
+	filter_init(Dev_addr);
+	HAL_CAN_Start(&hcan2);
+	HAL_CAN_ActivateNotification(&hcan2, CAN_IT_RX_FIFO0_MSG_PENDING);
+
+	TX_Header_init(&txHeader_LININ, Dev_addr, 0x380 &#62;&#62; 7, 8);
+
+	while(1)
+	{
+		xQueueReceive(Lin_In_queue, (void* )Lin_in_data, 0);
+		for(uint8_t i = 0; i &#60; sizeof(Lin_in_data)/sizeof(uint16_t); i++)
+		{
+			Lin_in_packet[i] = Lin_in_data[i];
+		}
+
+		if (Flash_SETTINGS.Transm_allowed == 1)
+		{
+			Ok_or_not = HAL_CAN_AddTxMessage(&hcan2, &txHeader_LININ, (uint8_t*)Lin_in_packet, &mailbox);
+			if (Ok_or_not != HAL_OK)
+			{
+				while (1);
+			}
+		}
+
+		vTaskDelay(Flash_SETTINGS.Lin_In_per);
+	}
+}
+/**********************************************************/
+static void Receive_PWM_CAN_task (void* pvParameters)
+{
+	uint8_t Dig_out_states = 0;
+	uint8_t zone = 0;
+	uint8_t timeout_counter = 0;
+	uint16_t new_PWM[CHAN_QUANTITY] = {0};
+
+	uint8_t Dev_addr;
+	PWM_str new_PWM_str;
+
+	Dev_addr = Get_CAN_addr();
+
+	filter_init(Dev_addr);
+	RX_Header_init(&recHeader, Dev_addr, 0x200 &#62;&#62; 7, 8);
+	HAL_CAN_Start(&hcan2);
+
+	while(1)
+	{
+		if (xCAN.PWM_flag == 1)
+		{
+			for(uint8_t i = 2; i &#60; 7; i+=2)
+			{
+				recData_raw[i] = 0x0F & recDataPWM[i];
+			}
+			uint8_t bubble = 0;
+			for (uint8_t i = 2; i &#60; 7; i += 2)
+			{
+				bubble = recDataPWM[i];
+				recDataPWM[i] = recDataPWM[i + 1];
+				recDataPWM[i + 1] = bubble;
+			}
+
+			memcpy(&new_PWM_str, &recDataPWM, sizeof(recDataPWM));
+			Dig_out_states = new_PWM_str.Dig_outs;
+			xQueueSend(Dig_Out_queue, (void*)&Dig_out_states, 1);
+			zone = new_PWM_str.Zone_numb;
+
+			for(uint8_t i = 0; i &#60; 3; i++)
+			{
+				new_PWM_str.New_PWM[i] = new_PWM_str.New_PWM[i]*100/4095;
+			}
+
+			new_PWM[zone] = new_PWM_str.New_PWM[0];
+			new_PWM[zone+8] = new_PWM_str.New_PWM[1];
+			new_PWM[zone+16] = new_PWM_str.New_PWM[2];
+
+			xQueueSend(PWM_Val_queue, (void*)new_PWM, 1);
+			xCAN.PWM_flag = 0;
+		}
+		else
+			timeout_counter++;
+
+		if(timeout_counter &#62; 63) // 63 means that there were no new command
+		{
+			for(uint8_t i = 0; i &#60; CHAN_QUANTITY; i++)
+			{
+				new_PWM[i] = 0;
+			}
+			xQueueSend(PWM_Val_queue, (void*)new_PWM, 1);
+		}
+		vTaskDelay(80);
+	}
+}
+/**********************************************************/
+static void Receive_SDO_CAN_task (void* pvParameters)
+{
+	SDO_str rec_SDO_packet;
+	SDO_str tr_SDO_packet;
+	uint8_t* ptr;
+	uint8_t bubble = 0;
+	uint8_t Dev_addr = 0;
+	volatile uint32_t Index_val = 0;
+
+	uint8_t sub;
+
+	HAL_StatusTypeDef Ok_or_not;
+	uint32_t mailbox;
+
+	ptr = (uint8_t*)&tr_SDO_packet;
+	for(uint8_t i = 0; i &#60; sizeof(tr_SDO_packet); i++)
+	{
+		ptr[i] = 0;
+	}
+
+	Dev_addr = Get_CAN_addr();
+
+	TX_Header_init(&txHeader_SDO, Dev_addr, 0x580 &#62;&#62; 7, 8);
+
+	Dev_addr = Get_CAN_addr();
+
+	filter_init(Dev_addr);
+	RX_Header_init(&recHeader_SDO, Dev_addr, 0x600 &#62;&#62; 7, 8);
+	HAL_CAN_Start(&hcan2);
+
+	while(1)
+	{
+		if(xCAN.SDO_flag == 1)
+		{
+			bubble = recDataSDO[4];
+			recDataSDO[4] = recDataSDO[7];
+			recDataSDO[7] = bubble;
+			bubble = recDataSDO[5];
+			recDataSDO[5] = recDataSDO[6];
+			recDataSDO[6] = bubble;
+
+			sub = recDataSDO[3];
+
+			memcpy(&rec_SDO_packet, &recDataSDO, sizeof(recDataSDO));
+
+			/* Specifier processing */
+			if(rec_SDO_packet.Specifier & 0x80)
+			{
+				// Transmit dropping
+			}
+			else if (rec_SDO_packet.Specifier & 0x40) // Return values from memory
+			{
+				for (uint8_t i = 0; i &#60; 3; i++)
+					tr_SDO_packet.Index[i] = rec_SDO_packet.Index[i];
+				Index_val = rec_SDO_packet.Index[1] &#60;&#60; 8;
+				Index_val |= rec_SDO_packet.Index[0];
+
+				switch (Index_val)
+				{
+				case 0x7124:  // Actual value shift
+				{
+					// ???
+				}break;
+				case 0x7148:  // Minimal temperature (minimum measured temperature)
+				{
+					tr_SDO_packet.Specifier = calc_Spec(sizeof(Flash_SETTINGS.Min_temp));
+					tr_SDO_packet.Data[0] = (uint8_t) (Flash_SETTINGS.Min_temp);
+					tr_SDO_packet.Data[1] = (uint8_t) (Flash_SETTINGS.Min_temp &#62;&#62; 8);
+				}break;
+				case 0x7149: // MasbereichEnde (maximum measured temperature)
+				{
+					tr_SDO_packet.Specifier = calc_Spec(sizeof(Flash_SETTINGS.Max_temp));
+					tr_SDO_packet.Data[0] = (uint8_t) (Flash_SETTINGS.Max_temp);
+					tr_SDO_packet.Data[1] = (uint8_t) (Flash_SETTINGS.Max_temp &#62;&#62; 8);
+				}break;
+				case 0x7400:  // Actual value
+				{
+					// ???
+				}break;
+				case 0x6410:  // Actual temperature (?) value
+				{
+					// ???
+				}break;
+				case 0x6412:  // Regulator value
+					break;
+				case 0x6422:  // Zone on/off
+					break;
+				case 0x6425:  // Control byte
+					break;
+				case 0x2002:  // Terminal temperature
+					break;
+				case 0x2010:  //
+					break;
+				case 0x2110: // Termocouple type return
+				{
+					tr_SDO_packet.Specifier = calc_Spec(sizeof(Flash_SETTINGS.Termoc_types[sub-1]));
+					tr_SDO_packet.Data[0] = Flash_SETTINGS.Termoc_types[sub-1];
+				}
+					break;
+				case 0x2400:  // Current value
+					break;
+				case 0x2401:  // Reststromistwert
+					break;
+				case 0x2403:  // CurrSens poll period
+				{
+					tr_SDO_packet.Specifier = calc_Spec(sizeof((uint8_t) (Flash_SETTINGS.CS_per / 1000)));
+					tr_SDO_packet.Data[0] = (uint8_t) (Flash_SETTINGS.CS_per/1000);
+				}break;
+				case 0x1009:  // Board version
+					break;
+				case 0x100A:  // Programm version
+					break;
+				case 0x6F01:  // Forbiddance of transmission
+				{
+					tr_SDO_packet.Specifier = calc_Spec(sizeof(Flash_SETTINGS.Transm_allowed));
+					tr_SDO_packet.Data[0] = Flash_SETTINGS.Transm_allowed;
+				}
+					break;
+				}
+
+				Ok_or_not = HAL_CAN_AddTxMessage(&hcan2, &txHeader_SDO, (uint8_t*) &tr_SDO_packet, &mailbox);
+				if (Ok_or_not != HAL_OK)
+				{
+					while (1);
+				}
+			}
+			else if (rec_SDO_packet.Specifier & 0x20)  // Write new data
+			{
+				tr_SDO_packet.Specifier = 0x60;
+				for (uint8_t i = 0; i &#60; 3; i++)
+					tr_SDO_packet.Index[i] = rec_SDO_packet.Index[i];
+				for (uint8_t i = 0; i &#60; 4; i++)
+					tr_SDO_packet.Data[i] = 0;
+
+				Index_val = rec_SDO_packet.Index[1] &#60;&#60; 8;
+				Index_val |= rec_SDO_packet.Index[0];
+
+				switch (Index_val)
+				{
+				case 0x7124:  // Actual value shift
+					break;
+				case 0x7148:  // Minimal temperature (minimum measured temperature)
+				{
+					Flash_SETTINGS.Min_temp = rec_SDO_packet.Data[2] &#60;&#60; 8;
+					Flash_SETTINGS.Min_temp |= rec_SDO_packet.Data[3];
+					Flash_flag = 1;
+				}
+					break;
+				case 0x7149: // MasbereichEnde (maximum measured temperature)
+				{
+					Flash_SETTINGS.Max_temp = rec_SDO_packet.Data[2] &#60;&#60; 8;
+					Flash_SETTINGS.Max_temp |= rec_SDO_packet.Data[3];
+					Flash_flag = 1;
+				}
+					break;
+				case 0x7400:  // Actual value
+					break;
+				case 0x6410:  // Actual temperature (?) value
+					break;
+				case 0x6412:  // Regulator value
+					break;
+				case 0x6422:  // Zone on/off
+					break;
+				case 0x6425:  // Control byte
+					break;
+				case 0x2002:  // Terminal temperature
+					break;
+				case 0x2010:
+					break;
+				case 0x2110:  // Termocouple type change
+				{
+					uint8_t Cont_Reg_0 = 0b10110001;
+					uint8_t Cont_Reg_1 = 0b00100000;
+					Flash_SETTINGS.Termoc_types[sub-1] = rec_SDO_packet.Data[3];
+					Set_1_sensor(Cont_Reg_0, Cont_Reg_1, Flash_SETTINGS.Termoc_types[sub-1], sub-1);
+					Flash_flag = 1;
+				}
+					break;
+				case 0x2400:  // Current value
+					break;
+				case 0x2401:
+					break;
+				case 0x2403: // CurrSens poll period
+				{
+					Flash_SETTINGS.CS_per = (uint16_t)(rec_SDO_packet.Data[3]*1000);
+					Flash_flag = 1;
+				}break;
+				case 0x1009:  // Board version
+					break;
+				case 0x100A:  // Programm version
+					break;
+				case 0x6F01:  // Forbiddance of transmission
+				{
+					Flash_SETTINGS.Transm_allowed = rec_SDO_packet.Data[3];
+					Flash_flag = 1;
+				}
+					break;
+				}
+
+				Ok_or_not = HAL_CAN_AddTxMessage(&hcan2, &txHeader_SDO, (uint8_t*) &tr_SDO_packet, &mailbox);
+				if (Ok_or_not != HAL_OK)
+				{
+					while (1);
+				}
+			}
+
+
+			xCAN.SDO_flag = 0;
+		}
+		vTaskDelay(500);
+	}
+}
+
+/*************** EterCAT INTERFACE TASKS ****************/
+static void ETHCAT_task(void* pvParameters)
+{
+	unsigned char Data[1] = {0}; // Масив для SPI
+	volatile uint16_t CO_timer1ms = 0U; /* variable increments each millisecond */
+
+	Data[0] = 0x01; // Записуємо значення у масив, яке потрібно передати
+	HAL_SPI_Transmit(&hspi2, (uint8_t*) Data, 1, 10); // Передача значення по SPI
+
+	Sync_ = ASYNC; // встановлюємо асинхронний режим
+	CO_NMT_reset_cmd_t reset = CO_RESET_NOT;
+
+	/* increase variable each startup. Variable is stored in eeprom. */
+	OD_powerOnCounter++;
+
+	while (reset != CO_RESET_APP)
+	{
+		/* initialize CANopen */
+		CO_ReturnError_t err;
+		uint16_t timer1msPrevious;
+
+		// CAN NODE ID - u can change in the CO_OD.c address 0x2101 in ROM section store the value of ID
+		// now CAN_Node_ID = 0x30;
+		err = CO_init();
+		if (err != CO_ERROR_NO)
+		{
+			while (1)
+				;
+			/* CO_errorReport(CO-&#62;em, CO_EM_MEMORY_ALLOCATION_ERROR, CO_EMC_SOFTWARE_INTERNAL, err); */
+		}
+		reset = CO_RESET_NOT;
+		timer1msPrevious = CO_timer1ms;
+		while (reset == CO_RESET_NOT)
+		{
+			/* loop for normal program execution ******************************************/
+			uint16_t timer1msDiff;
+
+			timer1msDiff = CO_timer1ms - timer1msPrevious;
+			timer1msPrevious = CO_timer1ms;
+			INCREMENT_1MS(CO_timer1ms);
+			/*Receive data from computer*/
+			CO_CANinterrupt_Rx(CO-&#62;CANmodule[0]);
+			/* CANopen process */
+			reset = CO_process(CO, timer1msDiff);
+			//			tmrTask_thread();
+			/* sleep for interval */
+
+			//			/* Process Sync and read inputs */
+			//			CO_process_RPDO(CO);
+			/* Further I/O or nonblocking application code may go here. */
+
+			/* Write outputs */
+			CO_process_TPDO(CO);
+
+			//			            /* verify timer overflow */
+			//			            if(0) {
+			//			                CO_errorReport(CO-&#62;em, CO_EM_ISR_TIMER_OVERFLOW, CO_EMC_SOFTWARE_INTERNAL, 0U);
+			//			            }
+
+			/* Nonblocking application code may go here. */
+
+			/* Process EEPROM */
+		}
+	}
+
+	/* program exit ***************************************************************/
+	/* stop threads */
+	/* delete objects from memory */
+	CO_delete(0/* CAN module address */);
+
+//	if ( ECAT_Init () != true)                          	// Перевірка ініціалізаціЇ
+//	{
+//		while (1){}                                           // Залишаємося у нескінченному циклі
+//	}
+//
+//	uint8_t i = 0;
+//
+//	while(1)
+//	{
+//		MainTask(pRPDO);
+//		BufferIn.Byte[0] = i++;
+//		int x = BufferOut.Byte[0];
+//
+//		vTaskDelay(1000);
+//	}
+	vTaskDelete(NULL);
+}
+
+/****************************************************/
+/* 	ADC1	ADC3
+ ******************
+ * 	СUR2	CUR1
+ *	CUR3	CUR6
+ *	CUR4	CUR9
+ *	CUR5
+ *	CUR7
+ *	CUR8
+ */
+
+void CO_TIMER_ISR(void)
+{
+//    static ttimer tprof;
+//    saveTime(&tprof);
+//    CO_timer1ms++;
+
+    CO_process_RPDO(CO);
+    /*  TODO: zpracovani RPDO dat */
+
+    /*  TODO: priprava dat pro TPDO */
+    CO_process_TPDO(CO);
+
+    /* calculate cycle time for performance measurement */
+//    uint32_t t = getTime_us(&tprof);
+//    OD_performance[ODA_performance_timerCycleTime] = t;
+//    if (t &#62; OD_performance[ODA_performance_timerCycleMaxTime])
+//        OD_performance[ODA_performance_timerCycleMaxTime] = t;
+}
+
+/* USER CODE END 4 */
+
+/**
+  * @brief  Period elapsed callback in non blocking mode
+  * @note   This function is called  when TIM6 interrupt took place, inside
+  * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
+  * a global variable "uwTick" used as application time base.
+  * @param  htim : TIM handle
+  * @retval None
+  */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  /* USER CODE BEGIN Callback 0 */
+
+	if (htim-&#62;Instance == TIM9)
+	{
+		switch (mode)
+		{
+		case 0: // Count UP
+		{
+			counter++;
+			if(Measure_1 == OFF)
+			{
+				if(counter &#62; tim_9_pw_rate_chan1)
+					HAL_GPIO_WritePin(PWM1_GPIO_Port, PWM1_Pin, GPIO_PIN_RESET);
+				else
+					HAL_GPIO_WritePin(PWM1_GPIO_Port, PWM1_Pin, GPIO_PIN_SET);
+			}
+			if(Measure_2 == OFF)
+			{
+				if(counter &#62; tim_9_pw_rate_chan2)
+					HAL_GPIO_WritePin(PWM2_GPIO_Port, PWM2_Pin, GPIO_PIN_RESET);
+				else
+					HAL_GPIO_WritePin(PWM2_GPIO_Port, PWM2_Pin, GPIO_PIN_SET);
+			}
+				if (counter == tim_9_period)
+				{
+					mode = 1;
+				}
+		} break;
+
+		case 1: // Count DOWN
+		{
+			counter--;
+			if(Measure_1 == OFF)
+			{
+				if(counter &#60; tim_9_pw_rate_chan1)
+					HAL_GPIO_WritePin(PWM1_GPIO_Port, PWM1_Pin, GPIO_PIN_SET);
+				else
+					HAL_GPIO_WritePin(PWM1_GPIO_Port, PWM1_Pin, GPIO_PIN_RESET);
+			}
+			if(Measure_2 == OFF)
+			{
+				if(counter &#60; tim_9_pw_rate_chan2)
+					HAL_GPIO_WritePin(PWM2_GPIO_Port, PWM2_Pin, GPIO_PIN_SET);
+				else
+					HAL_GPIO_WritePin(PWM2_GPIO_Port, PWM2_Pin, GPIO_PIN_RESET);
+			}
+			if (counter == 0)
+			{
+				mode = 0;
+			}
+		} break;
+		}
+	}
+
+  /* USER CODE END Callback 0 */
+  if (htim-&#62;Instance == TIM6) {
+    HAL_IncTick();
+  }
+  /* USER CODE BEGIN Callback 1 */
+
+  /* USER CODE END Callback 1 */
+}
+
+/**
+  * @brief  This function is executed in case of error occurrence.
+  * @param  file: The file name as string.
+  * @param  line: The line in file as a number.
+  * @retval None
+  */
+void _Error_Handler(char *file, int line)
+{
+  /* USER CODE BEGIN Error_Handler_Debug */
+  /* User can add his own implementation to report the HAL error return state */
+  while(1)
+  {
+  }
+  /* USER CODE END Error_Handler_Debug */
+}
+
+#ifdef  USE_FULL_ASSERT
+/**
+  * @brief  Reports the name of the source file and the source line number
+  *         where the assert_param error has occurred.
+  * @param  file: pointer to the source file name
+  * @param  line: assert_param error line source number
+  * @retval None
+  */
+void assert_failed(uint8_t* file, uint32_t line)
+{ 
+  /* USER CODE BEGIN 6 */
+  /* User can add his own implementation to report the file name and line number,
+     tex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+  /* USER CODE END 6 */
+}
+#endif /* USE_FULL_ASSERT */
+
+/**
+  * @}
+  */
+
+/**
+  * @}
+  */
+
+/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
+
+					</code>
+					</pre>
+
+				<!-- Footer -->
+					<footer id="footer">
+						<div class="inner">
+							<section>
+								<h2>Kontakte</h2>
+								<ul class="icons">
+									<li><a href="https://www.linkedin.com/in/bohdan-ko/" class="icon brands style2 fa-linkedin"><span class="label">LinkedIn</span></a></li>
+									<!-- <li><a href="#" class="icon brands style2 fa-facebook-f"><span class="label">Facebook</span></a></li> -->
+									<li><a href="https://www.instagram.com/bohdan_ko1/" class="icon brands style2 fa-instagram"><span class="label">Instagram</span></a></li>
+									<li><a href="tel:+4915203957756" class="icon solid style2 fa-phone"><span class="label">Phone</span></a></li>
+									<li><a href="mailto:bohdankondratenko@gmail.com" class="icon solid style2 fa-envelope"><span class="label">Email</span></a></li>
+								</ul>
+							</section>
+							<ul class="copyright">
+								<li>&copy; Untitled. All rights reserved</li><li>Design: <a href="http://html5up.net">HTML5 UP</a></li>
+							</ul>
+						</div>
+					</footer>
+
+			</div>
+
+		<!-- Scripts -->
+			<script src="../../assets/js/jquery.min.js"></script>
+			<script src="../../assets/js/browser.min.js"></script>
+			<script src="../../assets/js/breakpoints.min.js"></script>
+			<script src="../../assets/js/util.js"></script>
+			<script src="../../assets/js/main.js"></script>
+			<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/prism.min.js"></script>
+
+	</body>
+</html>

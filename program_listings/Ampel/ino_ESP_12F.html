@@ -1,0 +1,165 @@
+﻿<!DOCTYPE HTML>
+<!--
+	Template Phantom by HTML5 UP
+	Downloaded from html5up.net | @ajlkn
+	Changed by Bohdan Kondratenko for Job Application Purposes
+-->
+<html>
+	<head>
+		<title>ESP_12F.ino</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+		<link rel="stylesheet" href="../../assets/css/main.css" />
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/themes/prism.min.css"/>
+		<noscript><link rel="stylesheet" href="../../assets/css/noscript.css" /></noscript>
+	</head>
+
+	<body class="is-preload">
+
+		<button onclick="history.back()" id="arrow_back_outline" title="Back">
+			<span id="arrow_back"></span>
+		</button>
+
+		<button onclick="topFunction()" id="arrow_top_outline" title="Scroll up">
+			<span id="arrow_top"></span>
+		</button>
+
+		<!-- Wrapper -->
+			<div id="wrapper">
+
+				<!-- Header -->
+					<header id="header">
+						<div class="inner">
+
+							<!-- Logo -->
+								<a href="../../index.html" class="logo">
+									<span class="symbol"><img src="../../images/logo.svg" alt="" /></span><span class="title">Bohdan Kondratenko</span>
+								</a>
+
+						</div>
+					</header>
+
+				<!-- Main -->
+				<h2>ESP_12F.ino</h2>
+				<pre>
+					<code class="language-clike">
+#include "ESP_12F.h"
+
+void ESP_12F_struct_Init(ESP_12f_t* Modul)
+{
+  Modul-&#62;rst_pin = 17; // Arduino Nano pin D2
+  pinMode(Modul-&#62;rst_pin, OUTPUT);
+  digitalWrite(Modul-&#62;rst_pin, HIGH);
+  Modul-&#62;rst_delay = 100;
+  Modul-&#62;response_wait_delay = 100;
+  Modul-&#62;max_delays_amount = 100;
+  Modul-&#62;max_reset_tries = 3;
+}
+
+bool ESP_12F_Connect(ESP_12f_t* Modul, status_flags_t* Status)
+{
+  Serial.println("Connecting to ESP-01");
+  uint8_t delays_counter = 0;
+  
+  uint8_t reset_tries = 0;
+ 
+  uint8_t i = 0;
+  char Line[6];
+
+  Serial.println("ESP_01 conecting routine");
+  
+  while((Status-&#62;ESP_01_connected == 0) && (reset_tries &#60; Modul-&#62;max_reset_tries)) // if both ESP is not connected and timeout hasn't been reached
+  {  
+    //Serial.println("Here"); 
+    Serial1.println("alive?");
+    delay(Modul-&#62;response_wait_delay);
+    delays_counter++;
+
+    if(Serial1.available())
+    {
+      //Serial.println("data from esp received");
+      while(Serial1.available())
+      {
+        Line[i] = Serial1.read();
+        //Serial.println(Line[i]);
+        if(Line[i] == '\n')
+        {
+          Line[i-1] = '\0';
+          if(strcmp(Line, "YES") == 0)
+          {
+              Status-&#62;ESP_01_connected = 1;
+          }
+          else Status-&#62;ESP_01_connected = 0;
+          i = 0;
+        }
+        else
+          i++;
+      }
+    }
+
+    if(delays_counter &#62;= Modul-&#62;max_delays_amount) // if we wait more then [delays_counter*(Modul-&#62;max_delays_amount)/1000] seconds
+    {
+      Serial.println("Resetting the Modul");
+      delays_counter = 0;
+      reset_tries++;
+      digitalWrite(Modul-&#62;rst_pin, LOW);
+      delay(Modul-&#62;rst_delay);
+      digitalWrite(Modul-&#62;rst_pin, HIGH);
+    }
+  }
+}
+
+/* 
+ *  Sending of the infos of current states of the traffic lights to ESP-12F Modul
+ */
+void Send_Apel_State(ampel_t* Ampel)
+{
+  String Line = "post";
+
+  for(uint8_t i = 0; i &#60; 5; i++)
+  {
+    switch(Ampel-&#62;ein_ampel[i].future_state)
+    {
+      case GRUN: {Line = Line + "1";} break;
+      case ROT: {Line = Line + "0";} break;
+    }
+  }
+  
+  Serial1.println(Line);
+  Serial.println("Send Line: " + (String)Line);
+}
+
+					</code>
+					</pre>
+
+				<!-- Footer -->
+					<footer id="footer">
+						<div class="inner">
+							<section>
+								<h2>Kontakte</h2>
+								<ul class="icons">
+									<li><a href="https://www.linkedin.com/in/bohdan-ko/" class="icon brands style2 fa-linkedin"><span class="label">LinkedIn</span></a></li>
+									<!-- <li><a href="#" class="icon brands style2 fa-facebook-f"><span class="label">Facebook</span></a></li> -->
+									<li><a href="https://www.instagram.com/bohdan_ko1/" class="icon brands style2 fa-instagram"><span class="label">Instagram</span></a></li>
+									<li><a href="tel:+4915203957756" class="icon solid style2 fa-phone"><span class="label">Phone</span></a></li>
+									<li><a href="mailto:bohdankondratenko@gmail.com" class="icon solid style2 fa-envelope"><span class="label">Email</span></a></li>
+								</ul>
+							</section>
+							<ul class="copyright">
+								<li>&copy; Untitled. All rights reserved</li><li>Design: <a href="http://html5up.net">HTML5 UP</a></li>
+							</ul>
+						</div>
+					</footer>
+
+			</div>
+
+		<!-- Scripts -->
+			<script src="../../assets/js/jquery.min.js"></script>
+			<script src="../../assets/js/browser.min.js"></script>
+			<script src="../../assets/js/breakpoints.min.js"></script>
+			<script src="../../assets/js/util.js"></script>
+			<script src="../../assets/js/main.js"></script>
+			<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/prism.min.js"></script>
+
+	</body>
+</html>

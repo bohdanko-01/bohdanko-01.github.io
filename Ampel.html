@@ -1,0 +1,139 @@
+﻿<!DOCTYPE HTML>
+<!--
+	Template Phantom by HTML5 UP
+	Downloaded from html5up.net | @ajlkn
+	Changed by Bohdan Kondratenko for Job Application Purposes
+-->
+<html>
+	<head>
+		<title>Potsdammer Platz Verkehrsturm</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+		<link rel="stylesheet" href="assets/css/main.css" />
+		<noscript><link rel="stylesheet" href="assets/css/noscript.css" /></noscript>
+	</head>
+
+	<body class="is-preload">
+
+		<button onclick="parent.location='index.html'" id="arrow_back_outline" title="Startpage">
+			<span id="arrow_back"></span>
+		</button>
+
+		<button onclick="topFunction()" id="arrow_top_outline" title="Scroll up">
+			<span id="arrow_top"></span>
+		</button>
+		
+		<!-- Wrapper -->
+			<div id="wrapper">
+
+				<!-- Header -->
+					<header id="header">
+						<div class="inner">
+
+							<!-- Logo -->
+								<a href="index.html" class="logo">
+									<span class="symbol"><img src="images/logo.svg" alt="" /></span><span class="title">Bohdan Kondratenko</span>
+								</a>
+
+						</div>
+					</header>
+
+				<!-- Main -->
+					<div id="main">
+						<div class="inner">
+							<h1>Verkehrsturm aus Potsdammer Platz, Berlin</h1>
+							<span class="image main"><img src="images/Ampel_1.jpg" alt="" /></span>
+							<p>Das Projekt würde im Rahmen von Ausbildung bei Siemens Professional Education durchgeführt. Die Aufgabe 
+							des Projekts war: aus dem masstabgetreuerten Modell des historischen Verkehrsturms von Potsdammer Platz, Berlin, 
+							eine interaktive und funktionierende  Ausstellungseinheit zu bauen. Als Steuerungssystem, für vereinfachen der 
+							zukunftlichen Erweiterunden von Auszubildenden, wurde Arduino-Mega benutzt.</p>
+							<span class="image main"><img src="images/Ampel_3.jpg" alt="" /></span>
+							<p>Der Verkehrsturm enthält fünf Uhrwerke und fünf Ampeln. Nach der Durchführung des Projekts werden die 
+							Uhrwerke auf aktuelle Uhrzeit nach jeder Einspeisung des Systems automatisch eingestellt. Der Verkehrsturm 
+							hat einen WiFi-Modul der verbindet sich mit dem WLAN (wenn WLAN vorhanden ist). Damit wird die Zeit im System 
+							automatisch angepasst. Das System hat auch einen Real-Time-Clock Modul, der die Zeit im System auch ohne 
+							Netzwerk und ohne Stromversorgung speichert. Dafür, dass nach dem Wiedereinschalten die Uhrwerke auf aktuelle 
+							Zeit engestellt werden können, ist im System ein EEPROM-Speicher vorhanden. Da wird effizient und 
+							ressoursensparend die aktuell an Uhrwerke eingestellte Zeit gespeichert. Schließlich mit dem WiFi-Modul 
+							und WLAN-Verbindung kommuniziert das System mit einer Webseite, wo alle Benutzern die aktuelle Zustand 
+							der Ampeln sehen kann und auch manuell die Zustände ändern.
+							
+							<p> Programm und hardware Module die im Projekt benutzt sind:</p>
+							<ol> 
+								<li>Timers in Interrupt-Modus</li>
+								<li>Internet-Verbindung durch ESP-12F</li>
+								<li>Real Time Clock Modul</li>
+								<li>EEPROM Speicher</li>
+							</ol> 
+							<p>Zu Demonstrationszwecken sind die follgenden Dateien komplett oder teilweise dargestellt:</p>
+							<p>(Wählen Sie ein File aus, um dessen Inhalte sich anzuschauen)</p>
+
+							<h2>Program für Arduino</h2>
+							<ul>
+								<h3>*.ino Dateien</h3>
+								<li><a href="program_listings\Ampel\ino_Die_AMPEL_ARD_v1.html"><code>_Die_AMPEL_ARD_v1.ino</code></a></li>
+								<li><a href="program_listings\Ampel\ino_ESP_12F.html"><code>ESP_12F.ino</code></a></li>
+								<li><a href="program_listings\Ampel\ino_Lampen.html"><code>Lampen.ino</code></a></li>
+								<li><a href="program_listings\Ampel\ino_Memory.html"><code>Memory.ino</code></a></li>
+								<li><a href="program_listings\Ampel\ino_RTC.html"><code>RTC.ino</code></a></li>
+								<li><a href="program_listings\Ampel\ino_FAN.html"><code>FAN.ino</code></a></li>
+							</ul>
+
+							<ul>
+								<h3>*.h Dateien</h3>
+								<li><a href="program_listings\Ampel\h_Die_AMPEL_ARD_v1.html"><code>_Die_AMPEL_ARD_v1.h</code></a></li>
+								<li><a href="program_listings\Ampel\h_ESP_12F.html"><code>ESP_12F.h</code></a></li>
+								<li><a href="program_listings\Ampel\h_Lampen.html"><code>Lampen.h</code></a></li>
+								<li><a href="program_listings\Ampel\h_Memory.html"><code>Memory.h</code></a></li>
+								<li><a href="program_listings\Ampel\h_RTC.html"><code>RTC.h</code></a></li>
+								<li><a href="program_listings\Ampel\h_FAN.html"><code>FAN.h</code></a></li>
+							</ul>
+							
+							<h2>Program für WiFi-Modul ESP-12F</h2>
+							<ul>
+								<h3>*.ino Dateien</h3>
+								<li><a href="program_listings\Ampel\esp_ino_Die_AMPEL_ESP_v2.html"><code>_Die_AMPEL_ESP_v2.ino</code></a></li>
+								<li><a href="program_listings\Ampel\esp_ino_HTTP.html"><code>HTTP.ino</code></a></li>
+								<li><a href="program_listings\Ampel\esp_ino_Server.html"><code>Server.ino</code></a></li>
+							</ul>
+
+							<ul>
+								<h3>*.h Dateien</h3>
+								<li><a href="program_listings\Ampel\esp_h_Die_AMPEL_ESP_v2.html"><code>_Die_AMPEL_ESP_v2.h</code></a></li>
+								<li><a href="program_listings\Ampel\esp_h_HTTP.html"><code>HTTP.h</code></a></li>
+								<li><a href="program_listings\Ampel\esp_h_Server.html"><code>Server.h</code></a></li>
+							</ul>
+
+						</div>
+					</div>
+
+				<!-- Footer -->
+					<footer id="footer">
+						<div class="inner">
+							<section>
+								<h2>Kontakte</h2>
+								<ul class="icons">
+									<li><a href="https://www.linkedin.com/in/bohdan-ko/" class="icon brands style2 fa-linkedin"><span class="label">LinkedIn</span></a></li>
+									<!-- <li><a href="#" class="icon brands style2 fa-facebook-f"><span class="label">Facebook</span></a></li> -->
+									<li><a href="https://www.instagram.com/bohdan_ko1/" class="icon brands style2 fa-instagram"><span class="label">Instagram</span></a></li>
+									<li><a href="tel:+4915203957756" class="icon solid style2 fa-phone"><span class="label">Phone</span></a></li>
+									<li><a href="mailto:bohdankondratenko@gmail.com" class="icon solid style2 fa-envelope"><span class="label">Email</span></a></li>
+								</ul>
+							</section>
+							<ul class="copyright">
+								<li>&copy; Untitled. All rights reserved</li><li>Design: <a href="http://html5up.net">HTML5 UP</a></li>
+							</ul>
+						</div>
+					</footer>
+
+			</div>
+
+		<!-- Scripts -->
+			<script src="assets/js/jquery.min.js"></script>
+			<script src="assets/js/browser.min.js"></script>
+			<script src="assets/js/breakpoints.min.js"></script>
+			<script src="assets/js/util.js"></script>
+			<script src="assets/js/main.js"></script>
+
+	</body>
+</html>

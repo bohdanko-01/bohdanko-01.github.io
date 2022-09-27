@@ -1,0 +1,304 @@
+﻿<!DOCTYPE HTML>
+<!--
+	Template Phantom by HTML5 UP
+	Downloaded from html5up.net | @ajlkn
+	Changed by Bohdan Kondratenko for Job Application Purposes
+-->
+<html>
+	<head>
+		<title>main.c</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+		<link rel="stylesheet" href="../../assets/css/main.css" />
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/themes/prism.min.css"/>
+		<noscript><link rel="stylesheet" href="../../assets/css/noscript.css" /></noscript>
+	</head>
+
+	<body class="is-preload">
+
+		<button onclick="history.back()" id="arrow_back_outline" title="Back">
+			<span id="arrow_back"></span>
+		</button>
+
+		<button onclick="topFunction()" id="arrow_top_outline" title="Scroll up">
+			<span id="arrow_top"></span>
+		</button>
+
+		<!-- Wrapper -->
+			<div id="wrapper">
+
+				<!-- Header -->
+					<header id="header">
+						<div class="inner">
+
+							<!-- Logo -->
+								<a href="../../index.html" class="logo">
+									<span class="symbol"><img src="../../images/logo.svg" alt="" /></span><span class="title">Bohdan Kondratenko</span>
+								</a>
+
+						</div>
+					</header>
+
+				<!-- Main -->
+				<h2>main.c</h2>
+				<pre>
+					<code class="language-clike">
+/*
+ * main.c
+ *
+ * Created: 17.03.2022 22:27:16
+ * Author : bohdan
+ */ 
+#include "main.h"
+
+#include &#60;avr/io.h&#62;
+#include &#60;xc.h&#62;
+#include &#60;avr/interrupt.h&#62;		// defines sei();
+#include &#60;stdio.h&#62;
+#include &#60;stdint.h&#62;				// defines data types like uint8_t
+#include &#60;stdlib.h&#62;				// defines malloc();
+#include &#60;util/delay.h&#62;			// allows usage of _delay_ms_();
+#include &#60;math.h&#62;
+
+#include "UART_avr.h"
+#include "Ring_buffer.h"
+#include "Tim_ATmega328p.h"
+#include "PIN_avr.h"
+#include "Encoder.h"
+
+void Calc_Sinus(sinus_t* Sinus, uint16_t Freq, uint16_t Samp_Rate);
+
+#define BUFFER_SIZE (uint16_t)1024
+#define MAX_SAMPLES 25400UL
+#define SAMPLE_RATE 6250			// Hz
+#define UART_BAUD_RATE 57600UL		// 38400 bits/sec - maximal amounts of transferred bytes per second: 4800 bytes, 57600 - 7200 bytes/sec
+#define TIM2_PSK 1					// Prescaler of the TIM2
+
+uint8_t tim1_i; 
+uint16_t tim2_i;
+uint16_t sinus_i;
+uint8_t UART_bubble;
+uint8_t Current_PWM_Rate = 50;
+
+pin_t led = {_PB, 5};				// Arduino pin 13
+pin_t pwm_sound = {_PB, 3};			// timer 2 compA pin, Arduino pin 11
+pin_t pwm_volume = {_PB, 1};		// timer 1 compA pin, Arduino pin 9
+pin_t enc_a = {_PD, 3};				// Arduino 3
+pin_t enc_b = {_PD, 4};				// Arduino 4
+
+uint8_t Transfer_byte;
+uint16_t TIM2_update_rate;			// Defines how often will the TIM2 for sound creation update the value of OC2RA
+
+encoder_t Encoder;
+queue_t Ring_buffer;
+status_t Status;
+sinus_t Sinus_array;
+
+char str[30];  // String buffer for transferring to the COM Port
+
+int main(void)
+{
+	sei();
+	
+	TIM2_update_rate = (uint16_t)(F_CPU/TIM2_PSK/256/SAMPLE_RATE);
+	
+	pin_mode(pwm_sound, OUTPUT);
+	pin_mode(led, OUTPUT);
+	pin_mode(pwm_volume, OUTPUT);	
+	
+	init_buffer(&Ring_buffer, BUFFER_SIZE); // Memory allocation for the buffer
+	UART0_start(UART_BAUD_RATE);
+	
+	init_encoder(&Encoder, enc_a, enc_b);
+	
+	TIMER_Set(TIM1, PWM, Current_PWM_Rate);				// Task of the TIM1 - PWM generation for volume control. 50 = Duty Cycle
+	
+	TIMER_Set(TIM2, TIM2_A_SOUND_PWM, 0);	// Task of the TIM2 - PWM generation for Sound playing
+	Calc_Sinus(&Sinus_array, 440, SAMPLE_RATE);
+	
+	sprintf(str, "MCU_OK, UPD RATE = %d\n", TIM2_update_rate);
+	print_str(str);
+	sprintf(str, "F_PWM = %d Hz\n", (int)(F_CPU/(unsigned long)TIM2_PSK/(unsigned long)256));
+	print_str(str);
+	
+    while (1) 
+    {
+		/******************************* SETTING THE VOLUME VALUE *******************************/ 
+		if(Encoder.ticks_RIGHT &#62; 0)
+		{
+			if(Current_PWM_Rate &#60; 100)
+			{
+				Current_PWM_Rate++;
+				TIM1_Set_PWM(Current_PWM_Rate);
+			}
+				//Current_PWM_Rate = pwm_write_perc(PWM_Out, Current_PWM_Rate + DIFFERENTIAL_VAL); // increasing the PWM with every tick
+			Encoder.ticks_RIGHT--;
+			sprintf(str, "OCR1A = %d\tPWM = %d\n", OCR1A, Current_PWM_Rate);
+			print_str(str);
+			//print_enc_state(&Encoder);
+		}
+		
+		if(Encoder.ticks_LEFT &#62; 0)
+		{
+			//Current_PWM_Rate = pwm_write_perc(PWM_Out, 0 &#62; (Current_PWM_Rate - DIFFERENTIAL_VAL) ? 0 : (Current_PWM_Rate - DIFFERENTIAL_VAL)); // decreasing the PWM with every tick. if its looped over 0, write 0
+			if(Current_PWM_Rate &#62; 0)
+			{
+				Current_PWM_Rate--;
+				TIM1_Set_PWM(Current_PWM_Rate);
+			}
+			Encoder.ticks_LEFT--;
+			sprintf(str, "OCR1A = %d\tPWM = %d\n", OCR1A, Current_PWM_Rate);
+			print_str(str);
+			//Serial_print_enc_state(&Encoder);
+		}
+
+		
+		if(Status.RX_INT)
+		{
+			Status.RX_INT = 0;
+			if(put_sample(&Ring_buffer, &UART_bubble, 1) == LOW)			// Buffer Overflow
+			{
+				//Status.BUFF_OVF = 1;
+				pin_write(led, HIGH);
+			}
+			else   // debug, putting successfully 
+			{
+				//UART_TR(Bubble);
+				pin_write(led, LOW);
+			}
+			
+		}
+		
+		if(Status.TIM2_UPDATE)			// *********************************SOUND, SET SAMPLE
+		{
+			
+			Status.TIM2_UPDATE = 0;
+			
+			/*************************** SINUS GENERATOR ***************************/
+			/*OCR2A = Sinus_array.arr[sinus_i];
+			
+			sinus_i++;
+			
+			if(sinus_i &#62;= Sinus_array.size_)
+			{
+				sinus_i = 0;
+				//pin_toggle(led);
+			}*/
+			
+			
+			/*************************** RECEVING SOUND ***************************/
+			uint8_t sound_duty_cycle;
+			
+			//
+			
+			//pin_toggle(led);
+			
+			if((Ring_buffer.bytes_written != 0)) // if there is data to read from the buffer
+			{
+
+				if(get_sample(&Ring_buffer, &sound_duty_cycle, 1) == HIGH)
+				{
+					OCR2A = sound_duty_cycle;
+					//UART_TR(OCR2A);		//
+					//pin_write(led, LOW);
+				}
+				//else    // The buffer is empty
+				//{
+					//OCR2A = 0;
+					//pin_write(led, HIGH);
+				//}
+			}
+		}
+			
+    }
+}
+
+/**************** Creating the PWM Signal for playing sound ***************/
+ISR(TIMER2_OVF_vect) // Sound generation. After the amount of time according to the sample rate - put a new value to the OCR2A Register
+{
+	/* Interrupt freq F_CPU/PRESCALER/256 = 62500 Hz
+	 * SAMPLE_RATE is a value in Hz = Recording Frequency
+	 * then changing the PWM Value each F_CPU/PRESCALER/256/SAMPLE_RATE = TIM2_update_rate
+	 */
+	tim2_i++;
+	if(tim2_i &#62;= TIM2_update_rate)
+	{
+		Status.TIM2_UPDATE = 1;
+		tim2_i = 0;
+	}
+}
+
+/**************** Generation of Volume PWM. Updating the Encoder State ***************/
+ISR(TIMER1_OVF_vect)  // Interrupt period (psc = 1) = 15625 Hz
+{
+	tim1_i++;
+	if(tim1_i &#62;= 15)
+	{
+		update_enc_state(&Encoder);
+		tim1_i = 0;
+	}
+}
+
+/* UART RX Interrupt */
+/* Putting the received data into the Ring Buffer */
+ 
+ISR(USART_RX_vect)
+{
+	UART_bubble = UART_REC();
+	Status.RX_INT = 1;
+}
+
+void Calc_Sinus(sinus_t* Sinus, uint16_t Freq, uint16_t Samp_Rate)
+{
+	//uint8_t* ptr;
+	
+	//static long dt_us;                          // Variable to store time points for sinus calculation
+	Sinus-&#62;size_ = F_CPU / (TIM2_PSK * (1+0x00ff)) / Freq / TIM2_update_rate;            // Calculate Size of the array to be created
+	Sinus-&#62;freq = Freq;
+	
+	sprintf(str, "\nSIN Size = %d;\n", Sinus-&#62;size_);
+	print_str(str);
+	
+	Sinus-&#62;arr = (uint8_t*)malloc(Sinus-&#62;size_);            // Allocate memory for the array
+	
+	for(uint16_t i = 0; i &#60; Sinus-&#62;size_; i++)
+	{
+		Sinus-&#62;arr[i] = (sin(2*M_PI*i/Sinus-&#62;size_) + 1)*127; //(127 + (int)120*sin(2*M_PI*Freq*(dt_us/1e6))); // Fill in the array cells
+		sprintf(str, "%d\n", Sinus-&#62;arr[i]);
+		print_str(str);
+	}
+}
+					</code>
+					</pre>
+
+				<!-- Footer -->
+					<footer id="footer">
+						<div class="inner">
+							<section>
+								<h2>Kontakte</h2>
+								<ul class="icons">
+									<li><a href="https://www.linkedin.com/in/bohdan-ko/" class="icon brands style2 fa-linkedin"><span class="label">LinkedIn</span></a></li>
+									<!-- <li><a href="#" class="icon brands style2 fa-facebook-f"><span class="label">Facebook</span></a></li> -->
+									<li><a href="https://www.instagram.com/bohdan_ko1/" class="icon brands style2 fa-instagram"><span class="label">Instagram</span></a></li>
+									<li><a href="tel:+4915203957756" class="icon solid style2 fa-phone"><span class="label">Phone</span></a></li>
+									<li><a href="mailto:bohdankondratenko@gmail.com" class="icon solid style2 fa-envelope"><span class="label">Email</span></a></li>
+								</ul>
+							</section>
+							<ul class="copyright">
+								<li>&copy; Untitled. All rights reserved</li><li>Design: <a href="http://html5up.net">HTML5 UP</a></li>
+							</ul>
+						</div>
+					</footer>
+
+			</div>
+
+		<!-- Scripts -->
+			<script src="../../assets/js/jquery.min.js"></script>
+			<script src="../../assets/js/browser.min.js"></script>
+			<script src="../../assets/js/breakpoints.min.js"></script>
+			<script src="../../assets/js/util.js"></script>
+			<script src="../../assets/js/main.js"></script>
+			<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/prism.min.js"></script>
+
+	</body>
+</html>

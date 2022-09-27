@@ -1,0 +1,528 @@
+﻿<!DOCTYPE HTML>
+<!--
+	Template Phantom by HTML5 UP
+	Downloaded from html5up.net | @ajlkn
+	Changed by Bohdan Kondratenko for Job Application Purposes
+-->
+<html>
+	<head>
+		<title>_Die_AMPEL_ARD_v1.ino</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+		<link rel="stylesheet" href="../../assets/css/main.css" />
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/themes/prism.min.css"/>
+		<noscript><link rel="stylesheet" href="../../assets/css/noscript.css" /></noscript>
+	</head>
+
+	<body class="is-preload">
+
+		<button onclick="history.back()" id="arrow_back_outline" title="Back">
+			<span id="arrow_back"></span>
+		</button>
+
+		<button onclick="topFunction()" id="arrow_top_outline" title="Scroll up">
+			<span id="arrow_top"></span>
+		</button>
+
+		<!-- Wrapper -->
+			<div id="wrapper">
+
+				<!-- Header -->
+					<header id="header">
+						<div class="inner">
+
+							<!-- Logo -->
+								<a href="../../index.html" class="logo">
+									<span class="symbol"><img src="../../images/logo.svg" alt="" /></span><span class="title">Bohdan Kondratenko</span>
+								</a>
+
+						</div>
+					</header>
+
+				<!-- Main -->
+				<h2>_Die_AMPEL_ARD_v1.ino</h2>
+				<pre>
+					<code class="language-clike">
+#include &#60;Wire.h&#62;           // I2C Interfave Library
+#include &#60;extEEPROM.h&#62;
+#include &#60;ds3231.h&#62;         // RTC Module Library
+#include &#60;GyverTimers.h&#62;    // Timer interrupts Library
+
+#include "_Die_AMPEL_ARD_v1.h"
+#include "Memory.h"
+#include "Lampen.h"
+#include "RTC.h"
+#include "ESP_12F.h"
+#include "FAN.h"
+
+//#define button 12 // TEMPORARY FOR CONNECTION DEBUGGING
+//uint8_t sent = 0; // TEMPORARY FOR CONNECTION DEBUGGING
+
+/********************************** VARIABLES **********************************/
+/******** Status Variables ********/
+status_flags_t Status;
+
+/******** RTC and Time variables ********/
+struct ts RTC_time; 
+uint16_t ticks_upd_clock = CLOCK_SYNCH_TIME_PERIOD;    // Tick counter for Clock Timer
+my_clock_t Clock;
+
+/******** Lamps variables ********/
+ampel_t Ampel;
+uint16_t ticks_ampel = AMPEL_MAIN_TIME;            // Tick counter for Lamp Timer (Main States)
+char POST_Request[] = {0,0,0,0,0};   // For storing the POST Request content from ESP-01
+
+/******** Variables for connectivity ********/
+ESP_12f_t ESP_Modul;
+
+char Rec_Line[255];                 // The buffer for data received from ESP-01
+uint8_t i = 0;
+
+/******** Variables for EEPROM ********/
+my_time_t EEPROM_time;
+extEEPROM EEPROM_Board(kbits_16, 1, 16); // device size, number of devices, page size
+
+/******** Variables for FAN ********/
+FAN_t Fan;
+
+/****************************** FUNCTION PROTOTYPES ******************************/
+void Lamp_Timer_Routine(status_flags_t* Status, ampel_t* Ampel); 
+void Pins_Routine(ampel_t* Ampel);
+void UART_Routine(status_flags_t* Status, char* Line, bool Silent);
+void Time_Routine(status_flags_t* Status, my_clock_t* Clock, my_time_t* EEPROM_time, ts* RTC_time);
+//void Fan_Routine(status_flags_t* Status);
+
+void setup() 
+{
+  pinMode(13, OUTPUT);          // Indicating LED (debug purpouses)
+  Wire.begin();
+  Serial.begin(115200);         // Debug port (programming connector)
+  Serial1.begin(9600);          // ESP_1 UART (RX1, TX1)
+  DS3231_init(0);
+  init_ampel(&Ampel);           // Initialize Ampel variable. just saving space here
+  init_clock(&Clock);           // Initialize Clock variable. just saving space here
+
+   /**** FAN Start ****/
+  FAN_Start(&Status, &Fan);          // The function uses delay(); 
+  Serial.println("FAN Started");
+  
+  /**** Setting Connection with ESP-01 ****/
+  ESP_12F_struct_Init(&ESP_Modul);
+  
+  ESP_12F_Connect(&ESP_Modul, &Status);
+  if(Status.ESP_01_connected == 1)
+  {
+    Serial.println("ESP-01 Connected!");
+    RTC_Set_Time(&Status, &RTC_time);
+  }
+  else
+  {
+    Serial.println("Wifi Connection Failed! Check Wifi Modul!");
+    while (1) // Will stop there forever (Notification - three short Blinks with LED on pin 13)
+    {
+      digitalWrite(13, HIGH);
+      delay(200);
+      digitalWrite(13, LOW);
+      delay(200);
+      digitalWrite(13, HIGH);
+      delay(200);
+      digitalWrite(13, LOW);
+      delay(200);
+      digitalWrite(13, HIGH);
+      delay(200);
+      digitalWrite(13, LOW);
+      delay(1500);
+    }
+  } 
+
+  /**** Setting Connection with EEPROM. Will stuck here if the EEPROM Modul is nit connected****/
+  EEPROM_init(&EEPROM_time);  
+
+  /**** Beginning of the timer interrupts. No more delays allowed!! ****/
+  Timer2.setPeriod(1000);       // Period 1000 uS = 1 mS   ************* CHOOSE RIGHT TIMER FOR ARDUINO MEGA *****************
+  Timer2.enableISR(CHANNEL_B);  // Channel B = Arduino Nano PIN D3 (https://alexgyver.ru/lessons/timer-isr/)
+  
+  Serial.println("LOOP START");
+}
+
+void loop() 
+{
+  Lamp_Timer_Routine(&Status, &Ampel);
+  Pins_Routine(&Ampel);
+  UART_Routine(&Status, Rec_Line, false);
+  Time_Routine(&Status, &Clock, &EEPROM_time, &RTC_time);
+  
+  //********* DEBUG USING A PUSHBUTTON **********
+  /*if(digitalRead(button) == 0)
+  {
+    if(sent == 0)
+    {
+      sent = 1;
+      DS3231_get(&RTC_time);
+      Serial.println("RTC Time : " + (String)RTC_time.hour + ":" + (String)RTC_time.min);
+      Serial.print("EEPROM Time: " + (String)EEPROM_time.hours + ":" + (String)EEPROM_time.minutes);
+    }
+  }
+  else
+    sent = 0;*/
+  /********* DEBUG USING A PUSHBUTTON **********/
+}
+
+/*
+ * Timer 2 Interrupt Handler. Being activatet once per 1 ms
+ */
+ISR(TIMER2_B) 
+{   
+   Status.Lamp_Tim_ChB_Int = 1;
+   Status.Pins_Tim_ChB_Int = 1;
+   Status.Clock_Tim_ChB_Int = 1;
+   //Status.Fan_Tim_ChB_Int = 1;
+}
+
+/*
+ * Traffic light control routine
+ */
+void Lamp_Timer_Routine(status_flags_t* Status, ampel_t* Ampel)
+{
+  //Serial.println("Lamp_Timer_Routine");
+  if(Status-&#62;Lamp_Tim_ChB_Int == 1)
+  {
+    ticks_ampel++;
+
+    if(Status-&#62;post_request_received == 1)          // if we have received a POST request from the Website
+    {
+      Serial.print("Request received:");
+      Serial.println(POST_Request);
+      for(uint8_t i = 0; i &#60; 5; i++)
+      {
+        switch(POST_Request[i])
+        {
+          case '0': {Ampel-&#62;ein_ampel[i].future_state = ROT;Serial.println("RED");} break;
+          case '1': {Ampel-&#62;ein_ampel[i].future_state = GRUN;Serial.println("GREEN");} break;
+        }
+      }
+      //Send_Apel_State(Ampel);
+      ticks_ampel = 0; // Resetting the timer to let our combination work one cycle
+      Status-&#62;post_request_received = 0;
+    }
+    
+    if(ticks_ampel &#62;= Ampel-&#62;main_state_time)      //  normal (independed) mode of work 
+    {
+      ticks_ampel = 0;
+      Ampel-&#62;curr_phase  = (Ampel-&#62;curr_phase+1)% AMOUNT_OF_PHASES  ; 
+      switch(Ampel-&#62;curr_phase) // here we work with main states of the lights
+      {
+        case 0:
+        {
+          Ampel-&#62;ein_ampel[0].future_state = GRUN;
+          Ampel-&#62;ein_ampel[1].future_state = ROT;
+          Ampel-&#62;ein_ampel[2].future_state = GRUN;
+          Ampel-&#62;ein_ampel[3].future_state = ROT;
+          Ampel-&#62;ein_ampel[4].future_state = ROT;
+        } break;
+        case 1:
+        {
+          Ampel-&#62;ein_ampel[0].future_state = GRUN;
+          Ampel-&#62;ein_ampel[1].future_state = ROT;
+          Ampel-&#62;ein_ampel[2].future_state = ROT;
+          Ampel-&#62;ein_ampel[3].future_state = GRUN;
+          Ampel-&#62;ein_ampel[4].future_state = ROT;
+        } break;
+        case 2:
+        {
+          Ampel-&#62;ein_ampel[0].future_state = ROT;
+          Ampel-&#62;ein_ampel[1].future_state = GRUN;
+          Ampel-&#62;ein_ampel[2].future_state = ROT;
+          Ampel-&#62;ein_ampel[3].future_state = GRUN;
+          Ampel-&#62;ein_ampel[4].future_state = ROT;
+        } break;
+        case 3:
+        {
+          Ampel-&#62;ein_ampel[0].future_state = ROT;
+          Ampel-&#62;ein_ampel[1].future_state = GRUN;
+          Ampel-&#62;ein_ampel[2].future_state = ROT;
+          Ampel-&#62;ein_ampel[3].future_state = ROT;
+          Ampel-&#62;ein_ampel[4].future_state = GRUN;
+        } break;
+        case 4:
+        {
+          Ampel-&#62;ein_ampel[0].future_state = ROT;
+          Ampel-&#62;ein_ampel[1].future_state = ROT;
+          Ampel-&#62;ein_ampel[2].future_state = GRUN;
+          Ampel-&#62;ein_ampel[3].future_state = ROT;
+          Ampel-&#62;ein_ampel[4].future_state = GRUN;
+        } break;
+      }
+    }
+
+    for(int i = 0; i &#60; 5; i++)
+    {
+      switch(Ampel-&#62;ein_ampel[i].future_state)
+      {
+        case ROT:
+        {
+           switch(Ampel-&#62;ein_ampel[i].current_state)       
+           {
+            case ROT:; break;
+            case GRUN: 
+            {
+              Ampel-&#62;ein_ampel[i].current_state = GRUN_ROT;
+            } break;
+            case GRUN_ROT:
+            {
+              if(Ampel-&#62;ein_ampel[i].ticks &#62;= Ampel-&#62;transit_state_time) // Time check
+              {
+                Ampel-&#62;ein_ampel[i].current_state = ROT;
+                Status-&#62;post_ready_to_send = 1;
+                Ampel-&#62;ein_ampel[i].ticks = 0; // Stop
+              }
+              else Ampel-&#62;ein_ampel[i].ticks++;
+            } break;
+            case ROT_GRUN: 
+            {
+              Ampel-&#62;ein_ampel[i].current_state = GRUN_ROT;
+            } break;
+           }
+        } break;
+        case GRUN:
+        {
+          switch(Ampel-&#62;ein_ampel[i].current_state)
+          {
+            case GRUN:; break;
+            case ROT:
+            {
+              Ampel-&#62;ein_ampel[i].ticks++; // Delay before switching
+              if ((uint16_t)Ampel-&#62;ein_ampel[i].ticks &#62;= (uint16_t)Ampel-&#62;transit_state_time);
+              {
+                Ampel-&#62;ein_ampel[i].current_state = ROT_GRUN; 
+                Ampel-&#62;ein_ampel[i].ticks = 0; 
+              }
+            } break;
+            case ROT_GRUN:
+            {
+              if(Ampel-&#62;ein_ampel[i].ticks &#62;= Ampel-&#62;transit_state_time) // Time check
+              {
+                Ampel-&#62;ein_ampel[i].current_state = GRUN;
+                Ampel-&#62;ein_ampel[i].ticks = 0;
+                Status-&#62;post_ready_to_send = 1;
+              }
+              else Ampel-&#62;ein_ampel[i].ticks++;
+            } break;
+            case GRUN_ROT: break;
+            //case ALLE_AUS: break;
+         }
+       }
+     }
+   }
+
+    if(Status-&#62;post_ready_to_send == 1)
+    {
+      Send_Apel_State(Ampel);                           /********************************************************************************************************************************************/
+      Status-&#62;post_ready_to_send = 0;
+    }
+    
+    Status-&#62;Lamp_Tim_ChB_Int = 0;
+  }
+}
+
+/* 
+ * Work with output pins (Lamps)
+ */
+void Pins_Routine(ampel_t* Ampel)
+{
+  //Serial.println("Pins_Routine");
+  if(Status.Pins_Tim_ChB_Int == 1)
+  {
+  for(uint8_t i = 0; i &#60; 5; i++)
+  {
+    //Serial.println((String)"Current state of " + i + " is " + Ampel-&#62;ein_ampel[i].current_state);
+    switch(Ampel-&#62;ein_ampel[i].current_state)
+    {
+      case ROT:
+      {
+        digitalWrite(Ampel-&#62;ein_ampel[i].rot, HIGH);
+        digitalWrite(Ampel-&#62;ein_ampel[i].gelb, LOW);
+        digitalWrite(Ampel-&#62;ein_ampel[i].grun, LOW);
+      } break;
+      
+      case ROT_GRUN:
+      {
+        digitalWrite(Ampel-&#62;ein_ampel[i].rot, HIGH);
+        digitalWrite(Ampel-&#62;ein_ampel[i].gelb, HIGH);
+        digitalWrite(Ampel-&#62;ein_ampel[i].grun, LOW);
+      } break;
+      
+      case GRUN:
+      {
+        digitalWrite(Ampel-&#62;ein_ampel[i].rot, LOW);
+        digitalWrite(Ampel-&#62;ein_ampel[i].gelb, LOW);
+        digitalWrite(Ampel-&#62;ein_ampel[i].grun, HIGH);
+      } break;
+      
+      case GRUN_ROT:
+      {
+        digitalWrite(Ampel-&#62;ein_ampel[i].rot, LOW);
+        digitalWrite(Ampel-&#62;ein_ampel[i].gelb, HIGH);
+        digitalWrite(Ampel-&#62;ein_ampel[i].grun, LOW);
+      } break;
+    }
+  }
+  Status.Pins_Tim_ChB_Int =0 ; 
+  } 
+}
+
+/* 
+ *  Receiving of a Command from ESP-01
+ *  Silent - mode of work - with writing the line to Serial monitor (false) or without (true)
+ */
+void UART_Routine(status_flags_t* Status, char* Line, bool Silent)
+{
+  //Serial.println("UART_Routine");
+  if(Serial1.available() &#62; 0)
+  {
+    Line[i] = Serial1.read();
+    if(Line[i] == '\n')
+    {
+      Line[i-1] = '\0';
+      Status-&#62;debug_flag = 1;
+      Status-&#62;string_received = 1;
+      i = 0;
+    }
+    else
+      i++;
+   }
+   if(Status-&#62;string_received == 1)
+   {
+    if(Silent == false)
+    {
+      Serial.println("From ESP-01: " + (String)Line); 
+    }
+    if((Line[0] == 'r') && (Line[1] == 'c') && (Line[2] == 'w') && (Line[3] == 'd') && isDigit(Line[4]) && isDigit(Line[5]) && isDigit(Line[6]) && (isDigit(Line[7])) && isDigit(Line[8]))
+    {
+      POST_Request[0] = Line[4];
+      POST_Request[1] = Line[5];
+      POST_Request[2] = Line[6];
+      POST_Request[3] = Line[7];
+      POST_Request[4] = Line[8];
+      Status-&#62;post_request_received = 1;
+    }
+    Status-&#62;string_received = 0;
+   }
+}
+
+
+
+/*
+ * Routine for moving Clock arrows. (Calculating the amount and implementing of ticks)
+ * Task: Calculate ticks-&#62; implement ticks -&#62; save the time from RTC into the Memory 
+ */
+void Time_Routine(status_flags_t* Status, my_clock_t* Clock, my_time_t* EEPROM_time, ts* RTC_time)
+{
+  if(Status-&#62;Clock_Tim_ChB_Int == 1)
+  {
+    ticks_upd_clock++;
+    
+    if(ticks_upd_clock &#62;= CLOCK_SYNCH_TIME_PERIOD) // Activation once per 5000 ms to synchronize actual Time and Time on clocks (to calculate the amount of "steps" for the minute arrow)
+    {
+      DS3231_get(RTC_time);                                            // Only this time reading is needed. Structure with EEPROM Time is Already written during initialisation
+      int16_t calculated_ticks = calculate_Ticks(RTC_time, EEPROM_time); 
+      Serial.print("\tCalculated ticks: ");
+      Serial.println(calculated_ticks);
+      Clock-&#62;ticks_to_do += calculated_ticks;
+        
+      Serial.print("Ticks to do updated: ");
+      Serial.println(Clock-&#62;ticks_to_do);
+      ticks_upd_clock = 0;
+    }
+    
+    if(Clock-&#62;ticks_to_do &#62; 0) // if there are steps to do
+    {
+      Clock-&#62;stopped = false;
+      if((Clock-&#62;ticks_timer &#60;= Clock-&#62;impulse_period) && (Clock-&#62;tick_in_progress == false))             // Start impulse immediately // condition changed
+      {
+        Clock-&#62;tick_in_progress = true;
+        do_impulse(Clock);
+      }
+      
+      Clock-&#62;ticks_timer++;
+      
+      if((Clock-&#62;ticks_timer &#62;= Clock-&#62;impulse_period) && (Clock-&#62;ticks_timer &#60;= (Clock-&#62;tick_period)))   // Pause between impulses
+      {
+        stop_clock(Clock);
+      }
+
+      if(Clock-&#62;ticks_timer &#62;= Clock-&#62;tick_period)                                                        // Impulse is done
+      {
+        Clock-&#62;ticks_to_do--;
+        Clock-&#62;ticks_timer = 0;
+        Clock-&#62;tick_in_progress = false; // allows us to start the next tick
+      }
+    }
+    else
+    {
+      if((Clock-&#62;ticks_to_do &#60;= 0) && (Clock-&#62;stopped == false)) // such condition only to prevent reentering the piece
+      {
+        Clock-&#62;stopped = true;
+        Serial.println("Clock stopped");
+        stop_clock(Clock);
+        EEPROM_save(EEPROM_time, RTC_time);
+        Serial.println("Memory written: Block: " + (String)EEPROM_time-&#62;offset + "\tHours: " + (String)EEPROM_time-&#62;hours + "\tMinutes: " + (String)EEPROM_time-&#62;minutes + "\tRewrite counter: " + (String)EEPROM_time-&#62;memorycell_write_counter);
+        Clock-&#62;ticks_timer = 0;
+      }
+    }
+    Status-&#62;Clock_Tim_ChB_Int = 0;
+  }
+}
+
+/* 
+ *  Fan (Ventilator, Cooler) control
+ *  in this version - NO Thermosensor. Starting of the fan id blind
+ */
+/*
+void Fan_Routine(status_flags_t* Status)
+{
+  if(Status-&#62;Fan_Tim_ChB_Int == 1)
+  {
+    if(Status-&#62;Fan_Started == 1) // if What?
+    {
+      
+    }
+
+    Status-&#62;Fan_Tim_ChB_Int = 0; 
+  }
+}*/
+
+					</code>
+					</pre>
+
+				<!-- Footer -->
+					<footer id="footer">
+						<div class="inner">
+							<section>
+								<h2>Kontakte</h2>
+								<ul class="icons">
+									<li><a href="https://www.linkedin.com/in/bohdan-ko/" class="icon brands style2 fa-linkedin"><span class="label">LinkedIn</span></a></li>
+									<!-- <li><a href="#" class="icon brands style2 fa-facebook-f"><span class="label">Facebook</span></a></li> -->
+									<li><a href="https://www.instagram.com/bohdan_ko1/" class="icon brands style2 fa-instagram"><span class="label">Instagram</span></a></li>
+									<li><a href="tel:+4915203957756" class="icon solid style2 fa-phone"><span class="label">Phone</span></a></li>
+									<li><a href="mailto:bohdankondratenko@gmail.com" class="icon solid style2 fa-envelope"><span class="label">Email</span></a></li>
+								</ul>
+							</section>
+							<ul class="copyright">
+								<li>&copy; Untitled. All rights reserved</li><li>Design: <a href="http://html5up.net">HTML5 UP</a></li>
+							</ul>
+						</div>
+					</footer>
+
+			</div>
+
+		<!-- Scripts -->
+			<script src="../../assets/js/jquery.min.js"></script>
+			<script src="../../assets/js/browser.min.js"></script>
+			<script src="../../assets/js/breakpoints.min.js"></script>
+			<script src="../../assets/js/util.js"></script>
+			<script src="../../assets/js/main.js"></script>
+			<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/prism.min.js"></script>
+
+	</body>
+</html>

@@ -1,0 +1,151 @@
+﻿<!DOCTYPE HTML>
+<!--
+	Template Phantom by HTML5 UP
+	Downloaded from html5up.net | @ajlkn
+	Changed by Bohdan Kondratenko for Job Application Purposes
+-->
+<html>
+	<head>
+		<title>Lampen.ino</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+		<link rel="stylesheet" href="../../assets/css/main.css" />
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/themes/prism.min.css"/>
+		<noscript><link rel="stylesheet" href="../../assets/css/noscript.css" /></noscript>
+	</head>
+
+	<body class="is-preload">
+
+		<button onclick="history.back()" id="arrow_back_outline" title="Back">
+			<span id="arrow_back"></span>
+		</button>
+
+		<button onclick="topFunction()" id="arrow_top_outline" title="Scroll up">
+			<span id="arrow_top"></span>
+		</button>
+
+		<!-- Wrapper -->
+			<div id="wrapper">
+
+				<!-- Header -->
+					<header id="header">
+						<div class="inner">
+
+							<!-- Logo -->
+								<a href="../../index.html" class="logo">
+									<span class="symbol"><img src="../../images/logo.svg" alt="" /></span><span class="title">Bohdan Kondratenko</span>
+								</a>
+
+						</div>
+					</header>
+
+				<!-- Main -->
+				<h2>Lampen.ino</h2>
+				<pre>
+					<code class="language-clike">
+#include "Lampen.h"
+
+/* Initialisation of the Traffic Light structure, written just to reduse the amount of code on the first page
+ * 
+ */
+void init_ampel(ampel_t* Ampel)
+{
+  
+  // Sub structure initialisation. Pin Numbers
+  Ampel-&#62;ein_ampel[0].rot = 13;
+  pinMode(Ampel-&#62;ein_ampel[0].rot, OUTPUT);
+  Ampel-&#62;ein_ampel[0].gelb = 12;
+  pinMode(Ampel-&#62;ein_ampel[0].gelb, OUTPUT);
+  Ampel-&#62;ein_ampel[0].grun = 11;
+  pinMode(Ampel-&#62;ein_ampel[0].grun, OUTPUT);
+  Ampel-&#62;ein_ampel[0].current_state = ROT;
+  Ampel-&#62;ein_ampel[0].future_state = ROT;
+  Ampel-&#62;ein_ampel[0].ticks = 0;
+  //Ampel-&#62;ein_ampel[0].grun_blinken = 0;
+  
+  Ampel-&#62;ein_ampel[1].rot = 10;
+  pinMode(Ampel-&#62;ein_ampel[1].rot, OUTPUT);
+  Ampel-&#62;ein_ampel[1].gelb = 9;
+  pinMode(Ampel-&#62;ein_ampel[1].gelb, OUTPUT);
+  Ampel-&#62;ein_ampel[1].grun = 8;
+  pinMode(Ampel-&#62;ein_ampel[1].grun, OUTPUT);
+  Ampel-&#62;ein_ampel[1].current_state = ROT;
+  Ampel-&#62;ein_ampel[1].future_state = ROT;
+  Ampel-&#62;ein_ampel[1].ticks = 0;
+  //Ampel-&#62;ein_ampel[1].grun_blinken = 0;
+  
+  Ampel-&#62;ein_ampel[2].rot = 5;
+  pinMode(Ampel-&#62;ein_ampel[2].rot, OUTPUT);
+  Ampel-&#62;ein_ampel[2].gelb = 7;
+  pinMode(Ampel-&#62;ein_ampel[2].gelb, OUTPUT);
+  Ampel-&#62;ein_ampel[2].grun = 6;
+  pinMode(Ampel-&#62;ein_ampel[2].grun, OUTPUT);
+  Ampel-&#62;ein_ampel[2].current_state = ROT;
+  Ampel-&#62;ein_ampel[2].future_state = ROT;
+  Ampel-&#62;ein_ampel[2].ticks = 0;
+  //Ampel-&#62;ein_ampel[2].grun_blinken = 0;
+
+  Ampel-&#62;ein_ampel[3].rot = 2;
+  pinMode(Ampel-&#62;ein_ampel[3].rot, OUTPUT);
+  Ampel-&#62;ein_ampel[3].gelb = 4;
+  pinMode(Ampel-&#62;ein_ampel[3].gelb, OUTPUT);
+  Ampel-&#62;ein_ampel[3].grun = 3;
+  pinMode(Ampel-&#62;ein_ampel[3].grun, OUTPUT);
+  Ampel-&#62;ein_ampel[3].current_state = ROT;
+  Ampel-&#62;ein_ampel[3].future_state = ROT;
+  Ampel-&#62;ein_ampel[3].ticks = 0;
+  //Ampel-&#62;ein_ampel[3].grun_blinken = 0;
+
+  Ampel-&#62;ein_ampel[4].rot = 14;
+  pinMode(Ampel-&#62;ein_ampel[4].rot, OUTPUT);
+  Ampel-&#62;ein_ampel[4].gelb = 15;
+  pinMode(Ampel-&#62;ein_ampel[4].gelb, OUTPUT);
+  Ampel-&#62;ein_ampel[4].grun = 16;
+  pinMode(Ampel-&#62;ein_ampel[4].grun, OUTPUT);
+  Ampel-&#62;ein_ampel[4].current_state = ROT;
+  Ampel-&#62;ein_ampel[4].future_state = ROT;
+  Ampel-&#62;ein_ampel[4].ticks = 0;
+//  Ampel-&#62;ein_ampel[4].grun_blinken = 0;
+  
+  // Timings
+  Ampel-&#62;main_state_time = AMPEL_MAIN_TIME; // mS
+  Ampel-&#62;transit_state_time = AMPEL_TRANSIT_TIME; // mS
+ // Ampel-&#62;blink_state_time = AMPEL_BLINK_TIME; // mS
+
+  Ampel-&#62;curr_phase = 0;
+}
+
+					</code>
+					</pre>
+
+				<!-- Footer -->
+					<footer id="footer">
+						<div class="inner">
+							<section>
+								<h2>Kontakte</h2>
+								<ul class="icons">
+									<li><a href="https://www.linkedin.com/in/bohdan-ko/" class="icon brands style2 fa-linkedin"><span class="label">LinkedIn</span></a></li>
+									<!-- <li><a href="#" class="icon brands style2 fa-facebook-f"><span class="label">Facebook</span></a></li> -->
+									<li><a href="https://www.instagram.com/bohdan_ko1/" class="icon brands style2 fa-instagram"><span class="label">Instagram</span></a></li>
+									<li><a href="tel:+4915203957756" class="icon solid style2 fa-phone"><span class="label">Phone</span></a></li>
+									<li><a href="mailto:bohdankondratenko@gmail.com" class="icon solid style2 fa-envelope"><span class="label">Email</span></a></li>
+								</ul>
+							</section>
+							<ul class="copyright">
+								<li>&copy; Untitled. All rights reserved</li><li>Design: <a href="http://html5up.net">HTML5 UP</a></li>
+							</ul>
+						</div>
+					</footer>
+
+			</div>
+
+		<!-- Scripts -->
+			<script src="../../assets/js/jquery.min.js"></script>
+			<script src="../../assets/js/browser.min.js"></script>
+			<script src="../../assets/js/breakpoints.min.js"></script>
+			<script src="../../assets/js/util.js"></script>
+			<script src="../../assets/js/main.js"></script>
+			<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/prism.min.js"></script>
+
+	</body>
+</html>

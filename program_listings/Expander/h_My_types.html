@@ -1,0 +1,369 @@
+﻿<!DOCTYPE HTML>
+<!--
+	Template Phantom by HTML5 UP
+	Downloaded from html5up.net | @ajlkn
+	Changed by Bohdan Kondratenko for Job Application Purposes
+-->
+<html>
+	<head>
+		<title>My_types.h</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+		<link rel="stylesheet" href="../../assets/css/main.css" />
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/themes/prism.min.css"/>
+		<noscript><link rel="stylesheet" href="../../assets/css/noscript.css" /></noscript>
+	</head>
+
+	<body class="is-preload">
+
+		<button onclick="history.back()" id="arrow_back_outline" title="Back">
+			<span id="arrow_back"></span>
+		</button>
+
+		<button onclick="topFunction()" id="arrow_top_outline" title="Scroll up">
+			<span id="arrow_top"></span>
+		</button>
+
+		<!-- Wrapper -->
+			<div id="wrapper">
+
+				<!-- Header -->
+					<header id="header">
+						<div class="inner">
+
+							<!-- Logo -->
+								<a href="../../index.html" class="logo">
+									<span class="symbol"><img src="../../images/logo.svg" alt="" /></span><span class="title">Bohdan Kondratenko</span>
+								</a>
+
+						</div>
+					</header>
+
+				<!-- Main -->
+				<h2>My_types.h</h2>
+					<pre>
+					<code class="language-clike">
+/*
+ * My_types.h
+ *
+ *  Created on: 26 мая 2018 г.
+ *      Author: Bohdan
+ */
+
+#ifndef MY_TYPES_H_
+#define MY_TYPES_H_
+
+/******** Numeric defines *********/
+#define MAX_PWM 100
+#define MIN_PWM 0
+
+#define LOW_BORDER 1 	// Low border for rough current measurements.
+#define HIGH_BORDER 1.5 // Upper border for precise current measurements.
+
+#define CUR_RAW_ARR_LENGTH 31	// Length of array of raw data collected from ADC
+#define CUR_PROC_ARR_LENGTH 21	// Length of array of proceeded data collected from ADC
+#define ADC_CURR_DIFFER 30		// Difference between two counts of array, to find the beginning of sinus
+#define CHAN_QUANTITY 24		// Quantity of PWM/temperature channels
+#define NUMB_CHAN_PER_ADC1 6	// Quantity of channels used in ADC_1
+#define NUMB_CHAN_PER_ADC3 3	// Quantity of channels used in ADC_3
+
+/******** Flash memory adress defines *********/
+#define PARAMS_START_MEM_ADR 0x08060000   // Memory bank 1, sector 7
+
+/******** Flash memory params numeric defines *********/
+#define PWM_PERIOD_VAL 640
+#define TEMPSENS_PERIOD_VAL 320
+#define LININ_PERIOD_VAL 2000
+#define CURSENS_PERIOD_VAL 3000
+#define SOFT_INIT_VERSION 0
+#define HARD_INIT_VERSION 0
+#define TRANSM_ALLOWED_VAL 1
+#define MAX_TEMP 400
+#define MIN_TEMP 0
+
+#include "stm32f4xx_hal.h"
+
+/* Type for working with heating elements (PWM)*/
+typedef enum
+{
+	PWM1 = 0,
+	PWM2 = 1,
+	PWM3 = 2,
+
+	PWM4 = 3,
+	PWM5 = 4,
+	PWM6 = 5,
+
+	PWM7 = 6,
+	PWM8 = 7,
+
+	PWM9 = 8,
+	PWM10 = 9,
+	PWM11 = 10,
+
+	PWM12 = 11,
+	PWM13 = 12,
+	PWM14 = 13,
+
+	PWM15 = 14,
+	PWM16 = 15,
+
+	PWM17 = 16,
+	PWM18 = 17,
+	PWM19 = 18,
+
+	PWM20 = 19,
+	PWM21 = 20,
+	PWM22 = 21,
+
+	PWM23 = 22,
+	PWM24 = 23,
+
+	HEL_NO = 24 // for cases when there is no heat elements connected to ADC channel;
+}heat_el_t;
+
+/* Type for working with current sensors (CurrSwitch)*/
+typedef enum
+{
+	CURR_SENS_1 = 1,
+	CURR_SENS_2 = 2,
+	CURR_SENS_3 = 3,
+	CURR_SENS_4 = 4,
+	CURR_SENS_5 = 5,
+	CURR_SENS_6 = 6,
+	CURR_SENS_7 = 7,
+	CURR_SENS_8 = 8,
+	CURR_SENS_9 = 9,
+}curr_sens_t;
+
+/* Type for working with temperature sensors. Chip Selection. (_#CS)*/
+typedef enum
+{
+	TEMP_SENS_1 = 0,
+	TEMP_SENS_2 = 1,
+	TEMP_SENS_3 = 2,
+	TEMP_SENS_4 = 3,
+	TEMP_SENS_5 = 4,
+	TEMP_SENS_6 = 5,
+	TEMP_SENS_7 = 6,
+	TEMP_SENS_8 = 7,
+	TEMP_SENS_9 = 8,
+	TEMP_SENS_10 = 9,
+	TEMP_SENS_11 = 10,
+	TEMP_SENS_12 = 11
+} temp_sens_t;
+
+/* General type for states */
+typedef enum
+{
+	HIGH = 0x00,
+	LOW = 0x01
+}SW_state_t;
+
+/* Type for work with states of outputs */
+typedef enum
+{
+	ON = 0x00,
+	OFF = 0x01,
+	THIRD = 0x02
+}Work_state_t;
+
+/* Type for coding the termocouples */
+typedef enum
+{
+	B = 0b000,
+	E = 0b001,
+	J = 0b010,
+	K = 0b011,
+	N = 0b100,
+	R = 0b101,
+	S = 0b110,
+	T = 0b111
+}TC_type_t;
+
+/* Type for work with current transformers */
+typedef enum
+{
+	SW1 = 0,
+	SW2 = 1,
+	SW3 = 2,
+	SW4 = 3,
+	SW5 = 4,
+	SW6 = 5,
+	SW7 = 6,
+	SW8 = 7,
+	SW9 = 8
+}Stromwand_t;
+
+/* Structure for processing UART debug data */
+typedef struct TaskParam_t
+{
+	uint8_t chan_numb[4];
+	uint8_t PWM_val[6];
+	uint8_t chan_rec_compl;
+	uint8_t PWM_rec_compl;
+}UART_param_str;
+
+typedef struct CAN_str
+{
+	uint8_t PWM_flag;  // Flag is set when PDO with address 0x200+Address is received
+	uint8_t SDO_flag;  // looks like it is unneeded
+}CAN_flag_str;
+
+/* Structure for work with settings that will be stored in flash */
+typedef struct Settings_struct
+{
+	uint16_t PWM_per; 			// PWM period, ms
+	uint16_t TS_per;  			// Temperature sensors polling period, ms
+	uint16_t Lin_In_per; 		// Linear inputs polling period, ms
+	uint16_t CS_per;     		// Current sensors polling period, ms
+	uint32_t Soft_ver;   		// Software version
+	uint32_t Hard_ver;  		// Hardware version
+	uint8_t Transm_allowed; 	// Allow, or forbid data transferring
+	uint16_t Max_temp;    		// Max temperature
+	uint16_t Min_temp;			// Min temperature
+	TC_type_t Termoc_types[24];	// Array with types of termocouples
+	uint8_t Name_str[256]; 		// String with device name
+	uint8_t Mask_matr[9][24];	// Matrix for ADC data sorting
+}Settings_str;
+
+/* Structure for working with temperature (and linear inputs) data package */
+typedef struct Temp_out_struct
+{
+	uint8_t Dig_IN;
+	uint8_t Zone_numb;
+	uint16_t Temperature[3];
+}Temp_str;
+
+typedef struct Current_out_struct
+{
+	uint8_t Zone_numb;
+	uint16_t Current;
+}Current_str;
+
+typedef struct new_PWM_struct
+{
+	uint8_t Dig_outs;
+	uint8_t Zone_numb;
+    uint16_t New_PWM[3];
+}PWM_str;
+
+typedef struct new_SDO_struct
+{
+	uint8_t Specifier;
+	uint8_t Index[3];
+    uint8_t Data[4];
+}SDO_str;
+
+#endif /* MY_TYPES_H_ */
+
+					</code>
+					</pre>
+
+				<!-- Footer -->
+					<footer id="footer">
+						<div class="inner">
+							<section>
+								<h2>Kontakte</h2>
+								<ul class="icons">
+									<li><a href="https://www.linkedin.com/in/bohdan-ko/" class="icon brands style2 fa-linkedin"><span class="label">LinkedIn</span></a></li>
+									<!-- <li><a href="#" class="icon brands style2 fa-facebook-f"><span class="label">Facebook</span></a></li> -->
+									<li><a href="https://www.instagram.com/bohdan_ko1/" class="icon brands style2 fa-instagram"><span class="label">Instagram</span></a></li>
+									<li><a href="tel:+4915203957756" class="icon solid style2 fa-phone"><span class="label">Phone</span></a></li>
+									<li><a href="mailto:bohdankondratenko@gmail.com" class="icon solid style2 fa-envelope"><span class="label">Email</span></a></li>
+								</ul>
+							</section>
+							<ul class="copyright">
+								<li>&copy; Untitled. All rights reserved</li><li>Design: <a href="http://html5up.net">HTML5 UP</a></li>
+							</ul>
+						</div>
+					</footer>
+
+			</div>
+
+		<!-- Scripts -->
+			<script src="../../assets/js/jquery.min.js"></script>
+			<script src="../../assets/js/browser.min.js"></script>
+			<script src="../../assets/js/breakpoints.min.js"></script>
+			<script src="../../assets/js/util.js"></script>
+			<script src="../../assets/js/main.js"></script>
+			<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.5.0/prism.min.js"></script>
+
+	</body>
+</html><!DOCTYPE HTML>
+<!--
+	Template Phantom by HTML5 UP
+	Downloaded from html5up.net | @ajlkn
+	Changed by Bohdan Kondratenko for Job Application Purposes
+-->
+<html>
+	<head>
+		<title>main.c</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+		<link rel="stylesheet" href="../../assets/css/main.css" />
+		<noscript><link rel="stylesheet" href="../../assets/css/noscript.css" /></noscript>
+	</head>
+
+	<body class="is-preload">
+
+		<button onclick="history.back()" id="arrow_back_outline" title="Back">
+			<span id="arrow_back"></span>
+		</button>
+
+		<button onclick="topFunction()" id="arrow_top_outline" title="Scroll up">
+			<span id="arrow_top"></span>
+		</button>
+
+		<!-- Wrapper -->
+			<div id="wrapper">
+
+				<!-- Header -->
+					<header id="header">
+						<div class="inner">
+
+							<!-- Logo -->
+								<a href="../../index.html" class="logo">
+									<span class="symbol"><img src="../../images/logo.svg" alt="" /></span><span class="title">Bohdan Kondratenko</span>
+								</a>
+
+						</div>
+					</header>
+
+				<!-- Main -->
+				<h2>My_types.h</h2>
+					<code class="language-git">
+					Test.
+					the code will be posted here
+					</code>
+
+				<!-- Footer -->
+					<footer id="footer">
+						<div class="inner">
+							<section>
+								<h2>Kontakte</h2>
+								<ul class="icons">
+									<li><a href="https://www.linkedin.com/in/bohdan-ko/" class="icon brands style2 fa-linkedin"><span class="label">LinkedIn</span></a></li>
+									<!-- <li><a href="#" class="icon brands style2 fa-facebook-f"><span class="label">Facebook</span></a></li> -->
+									<li><a href="https://www.instagram.com/bohdan_ko1/" class="icon brands style2 fa-instagram"><span class="label">Instagram</span></a></li>
+									<li><a href="tel:+4915203957756" class="icon solid style2 fa-phone"><span class="label">Phone</span></a></li>
+									<li><a href="mailto:bohdankondratenko@gmail.com" class="icon solid style2 fa-envelope"><span class="label">Email</span></a></li>
+								</ul>
+							</section>
+							<ul class="copyright">
+								<li>&copy; Untitled. All rights reserved</li><li>Design: <a href="http://html5up.net">HTML5 UP</a></li>
+							</ul>
+						</div>
+					</footer>
+
+			</div>
+
+		<!-- Scripts -->
+			<script src="../../assets/js/jquery.min.js"></script>
+			<script src="../../assets/js/browser.min.js"></script>
+			<script src="../../assets/js/breakpoints.min.js"></script>
+			<script src="../../assets/js/util.js"></script>
+			<script src="../../assets/js/main.js"></script>
+
+	</body>
+</html>
